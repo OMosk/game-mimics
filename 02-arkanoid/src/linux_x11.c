@@ -192,7 +192,8 @@ int main(/*int argc, char **argv*/) {
 
     clock_gettime(CLOCK_MONOTONIC, &frame_timing_after);
     long long passed = timespec_elapsed(&frame_timing_before, &frame_timing_after);
-    sleep_interval.tv_nsec = FRAME_DURATION_NANOSEC - passed - 2LL * clock_delay;
+    sleep_interval.tv_nsec = FRAME_DURATION_NANOSEC - passed - 2LL * clock_delay
+      - 150000LL/*scheduling lag after sleep*/;
 
     if (frame_timing_after.tv_sec == last_sec) {
       ++fps;
@@ -203,6 +204,9 @@ int main(/*int argc, char **argv*/) {
     }
 
     clock_nanosleep(CLOCK_MONOTONIC, 0, &sleep_interval, NULL);
+    clock_gettime(CLOCK_MONOTONIC, &frame_timing_after);
+//    passed = timespec_elapsed(&frame_timing_before, &frame_timing_after);
+//    printf("elapsed %lld clock_delay=%lld\n", passed, clock_delay);
   }
 
   XCloseDisplay(display);
