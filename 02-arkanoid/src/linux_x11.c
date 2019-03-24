@@ -34,6 +34,18 @@ static Window window;
 static uint window_width = OUTPUT_IMAGE_WIDTH;
 static uint window_height = OUTPUT_IMAGE_HEIGHT;
 
+static long long timespec_elapsed(struct timespec *before, struct timespec *after) {
+  return (long long)(after->tv_sec - before->tv_sec) * 1000000000LL
+    + after->tv_nsec - before->tv_nsec;
+}
+
+static long long game_gettime_delay(clockid_t id) {
+  struct timespec before, after;
+  clock_gettime(id, &before);
+  clock_gettime(id, &after);
+  return timespec_elapsed(&before, &after);
+}
+
 static void X11EventLoop(input_t *input) {
   XEvent event;
 
@@ -157,8 +169,9 @@ int main(/*int argc, char **argv*/) {
   input.pressed = PRESSED_NONE;
   struct timespec sleep_interval;
   sleep_interval.tv_sec = 0;
-  sleep_interval.tv_nsec = FRAME_DURATION_MICROSEC * 1000;
+  sleep_interval.tv_nsec = 0;
 
+  long long clock_delay = game_gettime_delay(CLOCK_MONOTONIC);
 
   struct timespec frame_timing_before, frame_timing_after;
   time_t last_sec = frame_timing_before.tv_sec;
@@ -174,16 +187,12 @@ int main(/*int argc, char **argv*/) {
     game_render(image_buffer, image_width, image_height, &game);
 
     XShmPutImage(display, window, DefaultGC(display, screen), image,
-              0, 0, 0, 0,
-              image_width, image_height, 0);
+                 0, 0, 0, 0, image_width, image_height, 0);
     XFlush(display);
 
     clock_gettime(CLOCK_MONOTONIC, &frame_timing_after);
-
-    long long passed =
-      (long long)(frame_timing_after.tv_sec - frame_timing_before.tv_sec) * 1000000000LL
-      + frame_timing_after.tv_nsec - frame_timing_before.tv_nsec;
-    sleep_interval.tv_nsec = (long long)(FRAME_DURATION_MICROSEC) * 1000LL - passed;
+    long long passed = timespec_elapsed(&frame_timing_before, &frame_timing_after);
+    sleep_interval.tv_nsec = FRAME_DURATION_NANOSEC - passed - 2LL * clock_delay;
 
     if (frame_timing_after.tv_sec == last_sec) {
       ++fps;
@@ -193,8 +202,7 @@ int main(/*int argc, char **argv*/) {
       last_sec = frame_timing_after.tv_sec;
     }
 
-    frame_timing_before = frame_timing_after;
-    nanosleep(&sleep_interval, NULL);
+    clock_nanosleep(CLOCK_MONOTONIC, 0, &sleep_interval, NULL);
   }
 
   XCloseDisplay(display);
