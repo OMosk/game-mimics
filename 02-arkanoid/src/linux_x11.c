@@ -8,11 +8,15 @@
 
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <X11/Xlib.h>
 #include <X11/X.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
+#include <X11/extensions/XShm.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 
 #include "game.h"
 
@@ -106,14 +110,45 @@ int main(/*int argc, char **argv*/) {
   const uint image_width = OUTPUT_IMAGE_WIDTH;
   const uint image_height = OUTPUT_IMAGE_HEIGHT;
   const uint image_buffer_size = 4 * image_width * image_height;
-  uint *image_buffer = (uint *) malloc(image_buffer_size);
-  bzero(image_buffer, image_buffer_size);
+
+  int major, minor, pixmaps;
+  if (XShmQueryVersion(display, &major, &minor, &pixmaps)) {
+    printf("SharedMemory available: %d.%d pixmaps=%d\n", major, minor, pixmaps);
+  } else {
+    FatalError("SharedMemory Extension is not available");
+  }
+
+  XShmSegmentInfo xshm_segment_info;
+  memset(&xshm_segment_info, 0, sizeof(xshm_segment_info));
 
   int depth = DefaultDepth(display, screen);
-  XImage *image = XCreateImage(display, visual, depth, ZPixmap, 0, (char *)image_buffer,
-                               image_width, image_height, 32, 0);
+  XImage *image = XShmCreateImage(display, visual, depth, ZPixmap,
+                                  NULL, &xshm_segment_info,
+                                  image_width, image_height);
+
   if (!image) {
     FatalError("Failed to create image");
+  }
+
+  xshm_segment_info.shmid = shmget(IPC_PRIVATE, image_buffer_size,
+                                   IPC_CREAT|0777);
+  if (xshm_segment_info.shmid < 0) {
+    perror(strerror(errno));
+    FatalError("Failed to get shared memory");
+  }
+  xshm_segment_info.shmaddr = shmat(xshm_segment_info.shmid, NULL, 0);
+  if(!xshm_segment_info.shmaddr) {
+    perror(strerror(errno));
+    FatalError("Failed to map shared memory to process");
+  }
+
+  xshm_segment_info.readOnly = 0;
+
+  image->data = xshm_segment_info.shmaddr;
+  uint *image_buffer = (uint *) image->data;
+
+  if (!XShmAttach(display, &xshm_segment_info)) {
+    FatalError("Failed to attach XShm");
   }
 
   game_t game;
@@ -131,9 +166,9 @@ int main(/*int argc, char **argv*/) {
 
     game_render(image_buffer, image_width, image_height, &game);
 
-    XPutImage(display, window, DefaultGC(display, screen), image,
+    XShmPutImage(display, window, DefaultGC(display, screen), image,
               0, 0, 0, 0,
-              image_width, image_height);
+              image_width, image_height, 0);
     XFlush(display);
 
     nanosleep(&sleep_interval, NULL);
