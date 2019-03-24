@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <stdbool.h>
 
 #include <time.h>
 #include <unistd.h>
@@ -89,7 +90,7 @@ int main(/*int argc, char **argv*/) {
     0, /*border width*/
     0, /*border pixel*/
     0  /*background pixel*/);
-  XStoreName(display, window, "Snake");
+  XStoreName(display, window, "Arkanoid");
   int screen = DefaultScreen(display);
 
   wmDeleteWindow = XInternAtom(display, "WM_DELETE_WINDOW", False);
@@ -128,7 +129,7 @@ int main(/*int argc, char **argv*/) {
 
     game_tick(&game, &input);
 
-    Render(image_buffer, image_width, image_height, &game);
+    game_render(image_buffer, image_width, image_height, &game);
 
     XPutImage(display, window, DefaultGC(display, screen), image,
               0, 0, 0, 0,
