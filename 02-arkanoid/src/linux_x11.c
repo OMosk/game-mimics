@@ -159,7 +159,14 @@ int main(/*int argc, char **argv*/) {
   sleep_interval.tv_sec = 0;
   sleep_interval.tv_nsec = FRAME_DURATION_MICROSEC * 1000;
 
+
+  struct timespec frame_timing_before, frame_timing_after;
+  time_t last_sec = frame_timing_before.tv_sec;
+  uint fps = 0;
+
   while(shouldContinue) {
+    clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
+
     X11EventLoop(&input);
 
     game_tick(&game, &input);
@@ -171,6 +178,22 @@ int main(/*int argc, char **argv*/) {
               image_width, image_height, 0);
     XFlush(display);
 
+    clock_gettime(CLOCK_MONOTONIC, &frame_timing_after);
+
+    long long passed =
+      (long long)(frame_timing_after.tv_sec - frame_timing_before.tv_sec) * 1000000000LL
+      + frame_timing_after.tv_nsec - frame_timing_before.tv_nsec;
+    sleep_interval.tv_nsec = (long long)(FRAME_DURATION_MICROSEC) * 1000LL - passed;
+
+    if (frame_timing_after.tv_sec == last_sec) {
+      ++fps;
+    } else {
+      //printf("FPS = %u\n", fps);
+      fps = 1;
+      last_sec = frame_timing_after.tv_sec;
+    }
+
+    frame_timing_before = frame_timing_after;
     nanosleep(&sleep_interval, NULL);
   }
 

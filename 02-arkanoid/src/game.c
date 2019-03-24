@@ -47,8 +47,8 @@ vector2_t vector2_t_normalize(vector2_t v) {
 }
 
 void game_render(uint *buffer, uint image_width, uint image_height, game_t *game) {
-  (void)game;
-  bzero(buffer, image_width * image_height * sizeof(uint));
+  // NOTE: most time we spend here currently
+  memset(buffer, 0, image_width * image_height * sizeof(uint));
 
   uint y = OUTPUT_IMAGE_HEIGHT - PLATFORM_HEIGHT_IN_PIXELS - PLATFORM_BOTTOM_MARGIN;
   uint x = (OUTPUT_IMAGE_WIDTH - PLATFORM_WIDTH_IN_PIXELS) * game->platform_position;
