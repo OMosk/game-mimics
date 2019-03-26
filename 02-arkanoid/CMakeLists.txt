@@ -10,4 +10,4 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 add_compile_options(-std=c11 -Wall -Wextra -Werror -gdwarf-2 -g3 -fno-omit-frame-pointer)
 
 add_executable(arkanoid src/linux_x11.c src/game.c)
-target_link_libraries(arkanoid X11 Xext m)
+target_link_libraries(arkanoid X11 Xext Xrandr m)

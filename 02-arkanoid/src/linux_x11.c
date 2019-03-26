@@ -5,6 +5,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <time.h>
 #include <unistd.h>
@@ -15,6 +16,7 @@
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XShm.h>
+#include <X11/extensions/Xrandr.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
@@ -39,12 +41,12 @@ static long long timespec_elapsed(struct timespec *before, struct timespec *afte
     + after->tv_nsec - before->tv_nsec;
 }
 
-static long long game_gettime_delay(clockid_t id) {
-  struct timespec before, after;
-  clock_gettime(id, &before);
-  clock_gettime(id, &after);
-  return timespec_elapsed(&before, &after);
-}
+// static long long game_gettime_delay(clockid_t id) {
+//   struct timespec before, after;
+//   clock_gettime(id, &before);
+//   clock_gettime(id, &after);
+//   return timespec_elapsed(&before, &after);
+// }
 
 static void X11EventLoop(input_t *input) {
   XEvent event;
@@ -99,6 +101,11 @@ int main(/*int argc, char **argv*/) {
   XSetIOErrorHandler(game_tXIOErrorHandler);
 
   Window rootWindow = XDefaultRootWindow(display);
+
+  XRRScreenConfiguration *conf = XRRGetScreenInfo(display, rootWindow);
+  short current_rate = XRRConfigCurrentRate(conf);
+  printf("Refresh rate is %d\n", current_rate);
+
   window = XCreateSimpleWindow(
     display, rootWindow,
     0, 0, /*pos*/
@@ -171,42 +178,46 @@ int main(/*int argc, char **argv*/) {
   sleep_interval.tv_sec = 0;
   sleep_interval.tv_nsec = 0;
 
-  long long clock_delay = game_gettime_delay(CLOCK_MONOTONIC);
+  uint32_t *back_image_buffer = (uint32_t *) malloc(image_buffer_size);
+
+//  long long clock_delay = game_gettime_delay(CLOCK_MONOTONIC);
 
   struct timespec frame_timing_before, frame_timing_after;
   time_t last_sec = frame_timing_before.tv_sec;
   uint fps = 0;
 
-  while(shouldContinue) {
-    clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
+  clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
 
+  while(shouldContinue) {
     X11EventLoop(&input);
 
     game_tick(&game, &input);
 
-    game_render(image_buffer, image_width, image_height, &game);
-
-    XShmPutImage(display, window, DefaultGC(display, screen), image,
-                 0, 0, 0, 0, image_width, image_height, 0);
-    XFlush(display);
+    game_render(back_image_buffer, image_width, image_height, &game);
 
     clock_gettime(CLOCK_MONOTONIC, &frame_timing_after);
+
     long long passed = timespec_elapsed(&frame_timing_before, &frame_timing_after);
-    sleep_interval.tv_nsec = FRAME_DURATION_NANOSEC - passed - 2LL * clock_delay
-      - 150000LL/*scheduling lag after sleep*/;
+
+    long long to_sleep = FRAME_DURATION_NANOSEC - passed;
+    sleep_interval.tv_nsec = to_sleep - 100 * 1000;
 
     if (frame_timing_after.tv_sec == last_sec) {
       ++fps;
     } else {
-      //printf("FPS = %u\n", fps);
+      printf("\rFPS = %u              ", fps);
+      fflush(stdout);
       fps = 1;
       last_sec = frame_timing_after.tv_sec;
     }
 
     clock_nanosleep(CLOCK_MONOTONIC, 0, &sleep_interval, NULL);
-    clock_gettime(CLOCK_MONOTONIC, &frame_timing_after);
-//    passed = timespec_elapsed(&frame_timing_before, &frame_timing_after);
-//    printf("elapsed %lld clock_delay=%lld\n", passed, clock_delay);
+    clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
+
+    memcpy(image_buffer, back_image_buffer, image_buffer_size);
+    XShmPutImage(display, window, DefaultGC(display, screen), image,
+                 0, 0, 0, 0, image_width, image_height, 0);
+    XFlush(display);
   }
 
   XCloseDisplay(display);
