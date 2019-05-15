@@ -27,7 +27,7 @@
 #include "game.h"
 
 #ifndef NDEBUG
-#define assert(x) if (!(x)) {*(int *)0 = 1;}
+#define assert(x) do { if (!(x)) { abort(); } } while(0)
 #else
 #define assert(x)
 #endif
@@ -51,7 +51,24 @@ static long long timespec_elapsed(struct timespec *before, struct timespec *afte
     + after->tv_nsec - before->tv_nsec;
 }
 
-static void X11EventLoop(input_t *input) {
+typedef struct {
+  void *memory;
+  input_t *inputs;
+  int inputs_size_in_elements;
+  int next_input_index_to_read;
+  int next_input_index_to_write;
+  int recorded_inputs;
+  bool is_recording;
+  bool is_playing;
+} debug_repeat_loop_data_t;
+
+typedef struct {
+  bool start_recording;
+  bool stop_recording;
+  bool stop_playing;
+} debug_input_t;
+
+static void X11EventLoop(input_t *input, debug_input_t *debug_input) {
   XEvent event;
 
   int eventsUnprocessed = XPending(display);
@@ -81,6 +98,12 @@ static void X11EventLoop(input_t *input) {
         input->up.pressed = false;
       } else if (key == XK_Down) {
         input->down.pressed = false;
+      } else if (key == XK_F2) {
+        debug_input->start_recording = true;
+      } else if (key == XK_F3) {
+        debug_input->stop_recording = true;
+      } else if (key == XK_F4) {
+        debug_input->stop_playing = true;
       }
     } else if (event.type==ResizeRequest) {
       window_width = event.xresizerequest.width;
@@ -260,22 +283,33 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
 
 #define GAME_MEMORY_ADDRESS ((void *)(TERABYTES(32)))
-#define GAME_MEMORY_USAGE_BYTES (1024 * 1024)
+#define GAME_MEMORY_USAGE_BYTES MEGABYTES(4)
 #define PAGE_SIZE (4 * 1024)
 
   assert((uint64_t)GAME_MEMORY_ADDRESS % PAGE_SIZE == 0);
   assert(GAME_MEMORY_USAGE_BYTES % PAGE_SIZE == 0);
+
 
   void *memory = mmap(GAME_MEMORY_ADDRESS, GAME_MEMORY_USAGE_BYTES,
                       PROT_READ | PROT_WRITE,
                       MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED,
                       -1, 0);
 
-  if (!memory || !(memory + 1)) {
-    FatalError(strerror(errno));
-  }
   assert(memory == GAME_MEMORY_ADDRESS);
   memset(memory, 0, GAME_MEMORY_USAGE_BYTES);
+
+  debug_repeat_loop_data_t loop_data = {};
+  loop_data.memory = mmap(0, GAME_MEMORY_USAGE_BYTES,
+                                  PROT_READ | PROT_WRITE,
+                                  MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  assert(loop_data.memory != 0);
+
+  loop_data.inputs_size_in_elements = 60/*FPS*/ * 120/*seconds*/;
+  int max_recorded_input_size = loop_data.inputs_size_in_elements * sizeof(input_t);
+  loop_data.inputs = mmap(0, max_recorded_input_size,
+                                  PROT_READ | PROT_WRITE,
+                                  MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  assert(loop_data.inputs != NULL);
 
   uint32_t *back_image_buffer = (uint32_t *) malloc(image_buffer_size);
   drawing_buffer_t drawing_buffer;
@@ -302,12 +336,43 @@ int main(int argc, char **argv) {
       printf("libgame.so reloaded\n");
     }
 
-    X11EventLoop(&input);
-
+    debug_input_t debug_input = {};
+    X11EventLoop(&input, &debug_input);
     clock_gettime(CLOCK_MONOTONIC, &game_timer);
     long long passed = timespec_elapsed(&game_timer_old, &game_timer);
     input.seconds_elapsed = passed * 1e-9;
     game_timer_old = game_timer;
+
+    if (debug_input.start_recording) {
+      memcpy(loop_data.memory, memory, GAME_MEMORY_USAGE_BYTES);
+      loop_data.next_input_index_to_write = 0;
+      loop_data.is_recording = true;
+      printf("Start recording\n");
+    }
+    if (loop_data.is_recording) {
+      assert(loop_data.next_input_index_to_write < loop_data.inputs_size_in_elements);
+      loop_data.inputs[loop_data.next_input_index_to_write++] = input;
+    }
+    if (debug_input.stop_recording && loop_data.is_recording) {
+      loop_data.is_recording = false;
+      loop_data.is_playing = true;
+      loop_data.next_input_index_to_read = 0;
+      loop_data.recorded_inputs = loop_data.next_input_index_to_write;
+      memcpy(memory, loop_data.memory, GAME_MEMORY_USAGE_BYTES);
+      printf("Stop recording/Start playing\n");
+    }
+    if (loop_data.is_playing) {
+      input = loop_data.inputs[loop_data.next_input_index_to_read];
+      loop_data.next_input_index_to_read++;
+      if (loop_data.next_input_index_to_read > loop_data.recorded_inputs) {
+        loop_data.next_input_index_to_read = 0;
+        memcpy(memory, loop_data.memory, GAME_MEMORY_USAGE_BYTES);
+      }
+    }
+    if (debug_input.stop_playing && loop_data.is_playing) {
+      loop_data.is_playing = false;
+      printf("Stop playing\n");
+    }
 
     library.game_tick(memory, &input, &drawing_buffer);
 
