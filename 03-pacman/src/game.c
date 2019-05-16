@@ -9,7 +9,7 @@
 #include <math.h>
 #include <float.h>
 
-//static const uint16_t empty_space = 0;
+static const uint16_t empty_space = 0;
 static const uint16_t pacdot = 1;
 static const uint16_t wall = 2;
 static const uint16_t pacman = 3;
@@ -105,14 +105,14 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
 
   for (int i = 0; i < FIELD_HEIGHT; ++i) {
     for (int j = 0; j < FIELD_WIDTH; ++j) {
-      if (level[i][j] == wall) {
+      if (game->level[i][j] == wall) {
         draw_rectangle(buffer,
                        j *TILE_SIZE_IN_PIXELS,  i * TILE_SIZE_IN_PIXELS,
                        TILE_SIZE_IN_PIXELS, TILE_SIZE_IN_PIXELS,
                        kColorWhite);
       }
 
-      if (level[i][j] == pacdot) {
+      if (game->level[i][j] == pacdot) {
         draw_pacdot(buffer, i, j);
       }
     }
@@ -125,14 +125,19 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
 
 void game_init(game_t *game) {
   game->is_inited = true;
+  game->stat = (game_stat_t){};
   for (int i = 0; i < FIELD_HEIGHT; ++i) {
     for (int j = 0; j < FIELD_WIDTH; ++j) {
       if (level[i][j] == pacman) {
         game->pacman.pos.x = j * TILE_SIZE_IN_PIXELS;
         game->pacman.pos.y = i * TILE_SIZE_IN_PIXELS;
       }
+      if (level[i][j] == pacdot) {
+        game->stat.pacdots_left++;
+      }
     }
   }
+  memcpy(game->level, level, sizeof(level));
   game->pacman.direction = game->pacman.next_desired_direction = DIRECTION_NONE;
   game->pacman.velocity = PACMAN_VELOCITY;
 }
@@ -250,11 +255,22 @@ static void do_snap_to_grid_movement(moving_entity_t *entity, float seconds_elap
   }
 }
 
+static ivector2_t float_to_index_position(vector2_t position) {
+  return (ivector2_t) {
+    (int) (position.x + TILE_SIZE_IN_PIXELS/2) / TILE_SIZE_IN_PIXELS,
+    (int) (position.y + TILE_SIZE_IN_PIXELS/2) / TILE_SIZE_IN_PIXELS
+  };
+}
+
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   game_t *game = (game_t *) memory;
 
   if (!game->is_inited) {
     game_init(game);
+  }
+  if (input->restart) {
+    game_init(game);
+    input->restart = false;
   }
 
   if (input->pause) {
@@ -274,6 +290,11 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   }
 
   do_snap_to_grid_movement(&game->pacman, input->seconds_elapsed);
+
+  ivector2_t pacman_idx_pos = float_to_index_position(game->pacman.pos);
+  if (game->level[pacman_idx_pos.y][pacman_idx_pos.x] == pacdot) {
+    game->level[pacman_idx_pos.y][pacman_idx_pos.x] = empty_space;
+  }
 
   game_render(game, buffer);
 }

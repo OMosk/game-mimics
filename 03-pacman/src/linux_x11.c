@@ -104,6 +104,8 @@ static void X11EventLoop(input_t *input, debug_input_t *debug_input) {
         debug_input->stop_recording = true;
       } else if (key == XK_F4) {
         debug_input->stop_playing = true;
+      } else if (key == XK_Escape) {
+        input->restart = true;
       }
     } else if (event.type==ResizeRequest) {
       window_width = event.xresizerequest.width;

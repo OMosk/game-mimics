@@ -33,6 +33,7 @@ typedef struct {
   button_t left, right, up, down;
   float seconds_elapsed;
   bool pause;
+  bool restart;
 } input_t;
 
 typedef enum {
@@ -42,6 +43,10 @@ typedef enum {
 typedef struct {
   float x, y;
 } vector2_t;
+
+typedef struct {
+  int x, y;
+} ivector2_t;
 
 #define VECTOR2_ADD(a, b) ((vector2_t){(a).x + (b).x, (a).y + (b).y})
 #define VECTOR2_SUB(a, b) ((vector2_t){(a).x - (b).x, (a).y - (b).y})
@@ -65,8 +70,15 @@ typedef struct {
 } moving_entity_t;
 
 typedef struct {
+  int pacdots_left;
+  int points;
+} game_stat_t;
+
+typedef struct {
   bool is_inited;
   moving_entity_t pacman;
+  game_stat_t stat;
+  uint16_t level[FIELD_HEIGHT][FIELD_WIDTH];
 } game_t;
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer);
