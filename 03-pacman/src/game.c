@@ -17,13 +17,13 @@ static const uint16_t pacman = 3;
 uint16_t level[FIELD_HEIGHT][FIELD_WIDTH] = {
   {2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,},
   {2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
+  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,2,},
+  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,2,},
+  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,2,},
   {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
-  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
-  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
-  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
-  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
-  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
-  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
+  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,2,},
+  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,2,},
+  {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,2,},
   {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
   {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
   {2,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,},
@@ -118,11 +118,9 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
     }
   }
 
-  //draw_pacman(buffer, &game->pacman_pos);
   draw_pacman(buffer, &game->pacman.pos);
 
   draw_grid(buffer);
-  (void) game;
 }
 
 void game_init(game_t *game) {
@@ -145,12 +143,19 @@ static const vector2_t vector_left = {-1, 0};
 static const vector2_t vector_right = {1, 0};
 
 static int direction_is_horizontal(direction_t direction) {
-  return direction == DIRECTION_LEFT || direction == DIRECTION_RIGHT 
+  return direction == DIRECTION_LEFT || direction == DIRECTION_RIGHT
     || direction == DIRECTION_NONE;
 }
 static int direction_is_vertical(direction_t direction) {
-  return direction == DIRECTION_UP || direction == DIRECTION_DOWN 
+  return direction == DIRECTION_UP || direction == DIRECTION_DOWN
     || direction == DIRECTION_NONE;
+}
+static bool is_tile_free(vector2_t new_pos) {
+  int i = (int)new_pos.y / TILE_SIZE_IN_PIXELS;
+  int i_1 = (int)(new_pos.y + TILE_SIZE_IN_PIXELS - 1) / TILE_SIZE_IN_PIXELS;
+  int j = (int)new_pos.x / TILE_SIZE_IN_PIXELS;
+  int j_1 = (int)(new_pos.x + TILE_SIZE_IN_PIXELS - 1) / TILE_SIZE_IN_PIXELS;
+  return level[i][j] != wall && level[i_1][j_1] != wall;
 }
 static void do_snap_to_grid_movement(moving_entity_t *entity, float seconds_elapsed) {
   if (entity->next_desired_direction != entity->direction) {
@@ -201,16 +206,13 @@ static void do_snap_to_grid_movement(moving_entity_t *entity, float seconds_elap
   vector2_t direction_vector = directions[entity->direction];
   vector2_t new_pos = {0, 0};
 
+  bool use_default_move = true;
+
   if (entity->next_desired_direction != entity->direction) {
     vector2_t *found_turn_point = NULL;
     float min_time_to_turn_point = FLT_MAX;
     for (int i = 0; i < ARR_LEN(turn_points); ++i) {
       vector2_t turn_point = turn_points[i];
-      printf("(%f %f) -> (%f %f) (%d) -> (%d)\n",
-             entity->pos.x, entity->pos.y,
-             turn_point.x, turn_point.y,
-             entity->direction, entity->next_desired_direction
-             );
       vector2_t shift_to_turn_point = VECTOR2_SUB(turn_point, entity->pos);
       float distance_sqr = VECTOR2_SQR_LEN(shift_to_turn_point);
       float distance = sqrtf(distance_sqr);
@@ -223,29 +225,29 @@ static void do_snap_to_grid_movement(moving_entity_t *entity, float seconds_elap
       }
     }
     if (found_turn_point) {
+      vector2_t next_tile = VECTOR2_ADD(*found_turn_point, 
+        VECTOR2_MULT_NUMBER(new_desired_direction, TILE_SIZE_IN_PIXELS));
+
+      if (is_tile_free(next_tile)) {
         float remaining_time = seconds_elapsed - min_time_to_turn_point;
         new_pos = VECTOR2_ADD(*found_turn_point,
           VECTOR2_MULT_NUMBER(new_desired_direction, remaining_time * entity->velocity));
+
         entity->direction = entity->next_desired_direction;
-    } else {
-      vector2_t shift = VECTOR2_MULT_NUMBER(direction_vector, entity->velocity * seconds_elapsed);
-      new_pos = VECTOR2_ADD(entity->pos, shift);
+        use_default_move = false;
+      }
     }
-  } else {
-    vector2_t shift = VECTOR2_MULT_NUMBER(direction_vector, entity->velocity * seconds_elapsed);
+  }
+
+  if (use_default_move) {
+    vector2_t shift =
+      VECTOR2_MULT_NUMBER(direction_vector, entity->velocity * seconds_elapsed);
     new_pos = VECTOR2_ADD(entity->pos, shift);
   }
 
-  {
-    int i = (int)new_pos.y / TILE_SIZE_IN_PIXELS;
-    int i_1 = (int)(new_pos.y + TILE_SIZE_IN_PIXELS - 1) / TILE_SIZE_IN_PIXELS;
-    int j = (int)new_pos.x / TILE_SIZE_IN_PIXELS;
-    int j_1 = (int)(new_pos.x + TILE_SIZE_IN_PIXELS - 1) / TILE_SIZE_IN_PIXELS;
-    if (level[i][j] != wall && level[i_1][j_1] != wall) {
-      entity->pos = new_pos;
-    }
+  if (is_tile_free(new_pos)) {
+    entity->pos = new_pos;
   }
-
 }
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
