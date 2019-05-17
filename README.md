@@ -46,7 +46,7 @@ After demo was doing reasonably well I decided to stop and keep it simple for no
 ## 02 - Arkanoid
 
 I wanted second demo to be 60fps smooth but still trivial so I decided to make an arkanoid.
-I still needed to rewrite platform code from C++ to C. I thought I new what was C++ and what was compatible with C in my code and I was wrong :).
+I still needed to rewrite platform code from C++ to C. I thought I knew what was C++ and what was compatible with C in my code and I was wrong :).
 
 Few techical improvements here:
 
