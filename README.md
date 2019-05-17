@@ -1,4 +1,4 @@
-#Game mimics
+# Game mimics
 I want to acquire actually useful skills and understanding of how to do things
 in gamedev so I've decided to make small games and demos from scratch
 starting from something trivial and plain and gradually improve it
@@ -11,7 +11,7 @@ Demos are developed for Linux/X11 machine.
 I've tried to separate platform layer from game code
 so other platforms should be possible to implement without much pain (probably).
 
-##01 - Snake
+## 01 - Snake
 
 I needed to start with something so I've chosen snake.
 I needed to accomplish few techinal achievements to make a demo:
@@ -43,7 +43,7 @@ After demo was doing reasonably well I decided to stop and keep it simple for no
 ![Snake demo](./gifs/snake.gif)
 
 
-##02 - Arkanoid
+## 02 - Arkanoid
 
 I wanted second demo to be 60fps smooth but still trivial so I decided to make an arkanoid.
 I still needed to rewrite platform code from C++ to C. I thought I new what was C++ and what was compatible with C in my code and I was wrong :).
