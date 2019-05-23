@@ -61,3 +61,38 @@ Few notes on things that 100% needed improvement:
 1. Non-continuous collision detection is very unstable but ok for now. More general and reliable approach should be found for next demos.
 
 ![Arkanoid demo](gifs/arkanoid.gif)
+
+
+## 03 - Pacman-like
+
+The main goal for next demo was loading and software rendering of bmp sprites
+with support of alpha channel.
+I wanted some CPU controlled entities also so pacman is the way to go.
+I thought that these features will be most complex to create.
+I was surpised that snap-to-grid movement became no. 1 in compexity for this demo but
+it was fun to program and tweak.
+
+Technical improvements in comparison with previous demos:
+
+1. BMP sprites rendering. Alpha channel also supported.
+1. Path finding in tiled environment.
+1. Snap-to-grid movement for entities.
+1. Record and replay input with according state restoring was added
+to debug facilities. Inspired by [HandMadeHero](https://handmadehero.org/) implementation.
+1. Trivial state machine logic for CPU entities.
+
+Few notes:
+
+1. Drawing sprites with semi-transparent pixels by hand is boring :) I was not able to make myself create other sprites for every direction of pacman and ghosts.
+1. Good level design is hard :)
+
+![Pacman demo](gifs/pacman.gif)
+
+### Record-replay demo:
+
+Here I press F2 to save state and start recording inputs.
+I press F3 to stop recording and start replaying inputs. Inputs are looped
+and state is restored at the beginning of every loop. F4 to exit loop and get control again. All current code is deterministic so it works perfectly for debugging and tweaking of behavior in combination with game code reloading using `dlopen`
+
+![Record-replay demo](gifs/record-replay-loop.gif)
+
