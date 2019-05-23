@@ -33,6 +33,9 @@ typedef unsigned int uint;
 #define assert(x)
 #endif
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 typedef struct {
   bool pressed;
 } button_t;
@@ -91,6 +94,25 @@ typedef enum {
 } ghost_state_t;
 
 typedef struct {
+  int pacdots_left;
+  int points;
+} game_stat_t;
+
+typedef struct {
+  uint8_t *data;
+  int size;
+} buffer_t;
+
+buffer_t platform_load_file(const char *filename);
+
+typedef struct {
+  uint32_t *data;
+  int w, h;
+} imagebuffer_t;
+
+imagebuffer_t game_decode_bmp(buffer_t buffer);
+
+typedef struct {
   moving_entity_t movement_data;
   ghost_color_t color;
   ghost_state_t state;
@@ -100,16 +122,21 @@ typedef struct {
   float time_till_course_correction;
   float cur_time_till_course_correction;
   int32_t wave_field[FIELD_HEIGHT][FIELD_WIDTH];
+  imagebuffer_t texture;
 } ghost_entity_t;
 
 typedef struct {
-  int pacdots_left;
-  int points;
-} game_stat_t;
+  moving_entity_t movement_data;
+  imagebuffer_t texture;
+} pacman_t;
+
+typedef struct {
+  uint8_t r, g, b, a;
+} rgba_t;
 
 typedef struct {
   bool is_inited;
-  moving_entity_t pacman;
+  pacman_t pacman;
   game_stat_t stat;
   uint16_t level[FIELD_HEIGHT][FIELD_WIDTH];
   ghost_entity_t ghosts[4];

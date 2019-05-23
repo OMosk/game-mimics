@@ -15,6 +15,8 @@
 #include <linux/limits.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
 #include <X11/Xlib.h>
 #include <X11/X.h>
@@ -25,6 +27,35 @@
 #include <sys/shm.h>
 
 #include "game.h"
+
+buffer_t platform_load_file(const char *path) {
+  buffer_t result = {0};
+
+  struct stat file_stat;
+  if (stat(path, &file_stat) != 0) {
+    perror(strerror(errno));
+    result.size = -1;
+    goto exit;
+  }
+
+  result.data = mmap(0, file_stat.st_size,
+                     PROT_READ | PROT_WRITE,
+                     MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+
+  int fd = open(path, O_RDONLY);
+  result.size = read(fd, result.data, file_stat.st_size);
+  if (result.size < 0) {
+    perror(strerror(errno));
+    result.size = -1;
+    goto cleanup;
+  }
+
+cleanup:
+  close(fd);
+
+exit:
+  return result;
+}
 
 void FatalError(const char *s) {
   fprintf(stderr, "%s\n", s);

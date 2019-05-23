@@ -50,6 +50,7 @@ static const uint16_t level[FIELD_HEIGHT][FIELD_WIDTH] = {
 };
 
 #define RGB(r, g, b) ((b) + ((g) << 8) + ((r) << 16))
+#define RGBA(r, g, b, a) ((b) + ((g) << 8) + ((r) << 16) + ((a) << 24))
 //                              B     G            R
 #define kColorWhite  (255 + (255 << 8) + (255 << 16))
 #define kColorYellow  (0 + (255 << 8) + (255 << 16))
@@ -62,6 +63,10 @@ static const uint16_t level[FIELD_HEIGHT][FIELD_WIDTH] = {
 
 static float game_sqr(float x) {
   return x*x;
+}
+
+static int game_count_trailing_zeroes(uint32_t x) {
+  return __builtin_ctz(x);
 }
 
 static void draw_rectangle(drawing_buffer_t *buffer, int x, int y,
@@ -92,6 +97,38 @@ static void draw_grid(drawing_buffer_t *buffer) {
   }
 }
 */
+static void draw_bitmap(drawing_buffer_t *buffer, imagebuffer_t bitmap, int x, int y) {
+  int x_min = MAX(0, x);
+  int y_min = MAX(0, y);
+  int x_max = MIN((int)buffer->width, x + bitmap.w);
+  int y_max = MIN((int)buffer->height, y + bitmap.h);
+
+  for (int it_y = 0; it_y < bitmap.h; ++it_y) {
+    int dest_y = y + it_y;
+    if (dest_y < y_min || dest_y >= y_max) {
+      continue;
+    }
+    //rgba_t *row = (rgba_t *)bitmap.data + (bitmap.h - it_y - 1) * bitmap.w;
+    rgba_t *row = (rgba_t *)bitmap.data + it_y * bitmap.w;
+    for (int it_x = 0; it_x < bitmap.w; ++it_x) {
+      int dest_x = x + it_x;
+      if (dest_x < x_min || dest_x >= x_max) {
+        continue;
+      }
+      rgba_t *bg_pixel = (rgba_t *)buffer->buffer + dest_y * buffer->width + dest_x;
+
+      rgba_t *fg_pixel = row + it_x;
+
+      rgba_t new_pixel = {0};
+      new_pixel.r = bg_pixel->r + (fg_pixel->r - bg_pixel->r) * (fg_pixel->a / 255.0f);
+      new_pixel.g = bg_pixel->g + (fg_pixel->g - bg_pixel->g) * (fg_pixel->a / 255.0f);
+      new_pixel.b = bg_pixel->b + (fg_pixel->b - bg_pixel->b) * (fg_pixel->a / 255.0f);
+      *bg_pixel = new_pixel;
+    }
+  }
+
+}
+
 
 static void draw_pacdot(drawing_buffer_t *buffer, int i, int j) {
   int x = j * TILE_SIZE_IN_PIXELS;
@@ -102,11 +139,10 @@ static void draw_pacdot(drawing_buffer_t *buffer, int i, int j) {
   draw_rectangle(buffer, x, y, s, s, kColorWhite);
 }
 
-static void draw_pacman(drawing_buffer_t *buffer, vector2_t *pos) {
-  int s = ENTITY_SIZE_IN_PIXELS;
-  float x = pos->x + (TILE_SIZE_IN_PIXELS - s)/2;
-  float y = pos->y + (TILE_SIZE_IN_PIXELS - s)/2;
-  draw_rectangle(buffer, x, y, s, s, kColorYellow);
+static void draw_pacman(drawing_buffer_t *buffer, pacman_t *pacman) {
+  int x = pacman->movement_data.pos.x;
+  int y = pacman->movement_data.pos.y;
+  draw_bitmap(buffer, pacman->texture, x, y);
 }
 
 static const uint ghost_colors[] = {
@@ -114,11 +150,12 @@ static const uint ghost_colors[] = {
 };
 
 static void draw_ghost(drawing_buffer_t *buffer, ghost_entity_t *entity) {
-  int s = ENTITY_SIZE_IN_PIXELS;
+  //int s = ENTITY_SIZE_IN_PIXELS;
   vector2_t *pos = &entity->movement_data.pos;
-  float x = pos->x + (TILE_SIZE_IN_PIXELS - s)/2;
-  float y = pos->y + (TILE_SIZE_IN_PIXELS - s)/2;
-  draw_rectangle(buffer, x, y, s, s, ghost_colors[entity->color]);
+  float x = pos->x; // + (TILE_SIZE_IN_PIXELS - s)/2;
+  float y = pos->y; // + (TILE_SIZE_IN_PIXELS - s)/2;
+  draw_bitmap(buffer, entity->texture, x, y);
+  //draw_rectangle(buffer, x, y, s, s, ghost_colors[entity->color]);
 }
 
 static void game_render(game_t *game, drawing_buffer_t *buffer) {
@@ -145,7 +182,7 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
     }
   }
 
-  draw_pacman(buffer, &game->pacman.pos);
+  draw_pacman(buffer, &game->pacman);
   for (uint i = 0; i < ARR_LEN(game->ghosts); ++i) {
     draw_ghost(buffer, game->ghosts + i);
   }
@@ -161,8 +198,8 @@ void game_init(game_t *game) {
   for (int i = 0; i < FIELD_HEIGHT; ++i) {
     for (int j = 0; j < FIELD_WIDTH; ++j) {
       if (level[i][j] == pacman) {
-        game->pacman.pos.x = j * TILE_SIZE_IN_PIXELS;
-        game->pacman.pos.y = i * TILE_SIZE_IN_PIXELS;
+        game->pacman.movement_data.pos.x = j * TILE_SIZE_IN_PIXELS;
+        game->pacman.movement_data.pos.y = i * TILE_SIZE_IN_PIXELS;
       }
       if (level[i][j] == pacdot) {
         game->stat.pacdots_left++;
@@ -182,8 +219,9 @@ void game_init(game_t *game) {
     }
   }
   memcpy(game->level, level, sizeof(level));
-  game->pacman.direction = game->pacman.next_desired_direction = DIRECTION_NONE;
-  game->pacman.velocity = PACMAN_VELOCITY;
+  game->pacman.movement_data.direction
+    = game->pacman.movement_data.next_desired_direction = DIRECTION_NONE;
+  game->pacman.movement_data.velocity = PACMAN_VELOCITY;
   for (uint i = 0; i < ARR_LEN(game->ghosts); ++i) {
     game->ghosts[i].color = (ghost_color_t) i;
     game->ghosts[i].movement_data.velocity = GHOST_VELOCITY;
@@ -194,6 +232,24 @@ void game_init(game_t *game) {
     game->ghosts[i].state = GHOST_STATE_INACTIVITY;
   }
   game->over = false;
+
+  buffer_t red_ghost_image_buffer = platform_load_file("../assets/red.bmp");
+  buffer_t blue_ghost_image_buffer = platform_load_file("../assets/blue.bmp");
+  buffer_t green_ghost_image_buffer = platform_load_file("../assets/green.bmp");
+  buffer_t cyan_ghost_image_buffer = platform_load_file("../assets/cyan.bmp");
+  buffer_t pacman_image_buffer = platform_load_file("../assets/pacman.bmp");
+
+  assert(red_ghost_image_buffer.size > 0);
+  assert(blue_ghost_image_buffer.size > 0);
+  assert(green_ghost_image_buffer.size > 0);
+  assert(cyan_ghost_image_buffer.size > 0);
+  assert(pacman_image_buffer.size > 0);
+
+  game->ghosts[0].texture = game_decode_bmp(red_ghost_image_buffer);
+  game->ghosts[1].texture = game_decode_bmp(blue_ghost_image_buffer);
+  game->ghosts[2].texture = game_decode_bmp(green_ghost_image_buffer);
+  game->ghosts[3].texture = game_decode_bmp(cyan_ghost_image_buffer);
+  game->pacman.texture = game_decode_bmp(pacman_image_buffer);
 }
 
 static const vector2_t vector_up = {0, -1};
@@ -391,7 +447,7 @@ static direction_t get_next_direction(int16_t *field, int w, int h, ivector2_t p
 static void update_ghosts(game_t *game,
                           ghost_entity_t *ghosts, int ghosts_size,
                           float secs_elapsed) {
-  ivector2_t pacman_tile_pos = float_to_index_position(game->pacman.pos);
+  ivector2_t pacman_tile_pos = float_to_index_position(game->pacman.movement_data.pos);
 
   int16_t wave_field[FIELD_HEIGHT][FIELD_WIDTH] = {};
   ivector2_t wave_field_queue[FIELD_HEIGHT * FIELD_WIDTH] = {};
@@ -458,29 +514,29 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
       return;
     }
     if (input->up.pressed) {
-      game->pacman.next_desired_direction = DIRECTION_UP;
+      game->pacman.movement_data.next_desired_direction = DIRECTION_UP;
     }
     if (input->down.pressed) {
-      game->pacman.next_desired_direction = DIRECTION_DOWN;
+      game->pacman.movement_data.next_desired_direction = DIRECTION_DOWN;
     }
     if (input->left.pressed) {
-      game->pacman.next_desired_direction = DIRECTION_LEFT;
+      game->pacman.movement_data.next_desired_direction = DIRECTION_LEFT;
     }
     if (input->right.pressed) {
-      game->pacman.next_desired_direction = DIRECTION_RIGHT;
+      game->pacman.movement_data.next_desired_direction = DIRECTION_RIGHT;
     }
 
-    do_snap_to_grid_movement(&game->pacman, input->seconds_elapsed);
+    do_snap_to_grid_movement(&game->pacman.movement_data, input->seconds_elapsed);
 
     update_ghosts(game, game->ghosts, ARR_LEN(game->ghosts), input->seconds_elapsed);
 
-    ivector2_t pacman_idx_pos = float_to_index_position(game->pacman.pos);
+    ivector2_t pacman_idx_pos = float_to_index_position(game->pacman.movement_data.pos);
     if (game->level[pacman_idx_pos.y][pacman_idx_pos.x] == pacdot) {
       game->level[pacman_idx_pos.y][pacman_idx_pos.x] = empty_space;
     }
 
     for (uint i = 0; i < ARR_LEN(game->ghosts); ++i) {
-      if (are_entities_collide(game->pacman.pos, game->ghosts[i].movement_data.pos)) {
+      if (are_entities_collide(game->pacman.movement_data.pos, game->ghosts[i].movement_data.pos)) {
         game->over = true;
         game->game_over_color = ghost_colors[game->ghosts[i].color];
         break;
@@ -489,4 +545,85 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   }
 
   game_render(game, buffer);
+}
+
+static uint32_t game_read_16bytes(uint8_t *buffer) {
+  uint16_t result = 0;
+  result |= (*buffer++) << 0;
+  result |= (*buffer++) << 8;
+  return result;
+}
+
+static uint32_t game_read_32bytes(uint8_t *buffer) {
+  uint32_t result = 0;
+  result |= (*buffer++) << 0;
+  result |= (*buffer++) << 8;
+  result |= (*buffer++) << 16;
+  result |= (*buffer++) << 24;
+  return result;
+}
+
+static void game_store_32bytes(uint8_t *buffer, uint32_t n) {
+  *buffer++ = (uint8_t)((n & 0x000000FF)      );
+  *buffer++ = (uint8_t)((n & 0x0000FF00) >>  8);
+  *buffer++ = (uint8_t)((n & 0x00FF0000) >> 16);
+  *buffer++ = (uint8_t)((n & 0xFF000000) >> 24);
+}
+
+imagebuffer_t game_decode_bmp(buffer_t buffer) {
+  //http://www.ece.ualberta.ca/~elliott/ee552/studentAppNotes/2003_w/misc/bmp_file_format/bmp_file_format.htm
+  imagebuffer_t result = {0};
+
+  uint32_t data_offset = game_read_32bytes((uint8_t*)(buffer.data + 0xA));
+  uint32_t size = game_read_32bytes((uint8_t*)(buffer.data + 0x22));
+  uint32_t width = game_read_32bytes((uint8_t*)(buffer.data + 0x12));
+  uint32_t height = game_read_32bytes((uint8_t*)(buffer.data + 0x16));
+  uint16_t bits_per_pixel = game_read_16bytes((uint8_t*)(buffer.data + 0x1C));
+  uint32_t compression = game_read_32bytes((uint8_t*)(buffer.data + 0x1E));
+
+#define BI_BITFIELDS 3
+  assert(compression == BI_BITFIELDS);
+  assert(bits_per_pixel == 32);
+
+  uint32_t rmask, gmask, bmask, amask;
+  rmask = game_read_32bytes((uint8_t*)(buffer.data + 0x36 + 0));
+  gmask = game_read_32bytes((uint8_t*)(buffer.data + 0x36 + 4));
+  bmask = game_read_32bytes((uint8_t*)(buffer.data + 0x36 + 8));
+  amask = ((((uint32_t)-1) ^ rmask) ^ gmask) ^ bmask;
+
+  uint32_t rshift, gshift, bshift, ashift;
+  rshift = game_count_trailing_zeroes(rmask);
+  gshift = game_count_trailing_zeroes(gmask);
+  bshift = game_count_trailing_zeroes(bmask);
+  ashift = game_count_trailing_zeroes(amask);
+
+  result.w = width;
+  result.h = height;
+  result.data = (uint32_t *) (buffer.data + data_offset);
+
+  uint8_t *it = buffer.data + data_offset;
+  uint8_t *end = buffer.data + size;//+ buffer.size;
+  //uint8_t *end = buffer.data + buffer.size;
+
+  while (it < end) {
+    uint32_t old_value = game_read_32bytes(it);
+
+    uint32_t r = (old_value & rmask) >> rshift;
+    uint32_t g = (old_value & gmask) >> gshift;
+    uint32_t b = (old_value & bmask) >> bshift;
+    uint32_t a = (old_value & amask) >> ashift;
+
+    uint32_t new_value = RGBA(r, g, b, a);
+    game_store_32bytes(it, new_value);
+    it += 4;
+  }
+
+  uint32_t tmp_row[width * 4];
+  for (uint y = 0; y < height/2; ++y) {
+    memcpy(tmp_row, result.data + y * width, width * 4);
+    memcpy(result.data + y * width, result.data + (height - y - 1) * width, width * 4);
+    memcpy(result.data + (height - y - 1) * width, tmp_row, width * 4);
+  }
+
+  return result;
 }
