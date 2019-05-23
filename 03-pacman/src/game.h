@@ -14,6 +14,8 @@ typedef unsigned int uint;
 #define TILE_SIZE_IN_PIXELS 30
 
 #define PACMAN_VELOCITY (70.)
+#define GHOST_VELOCITY (PACMAN_VELOCITY * 0.9)
+#define ENTITY_SIZE_IN_PIXELS ((TILE_SIZE_IN_PIXELS * 3.) / 4.)
 
 #define OUTPUT_IMAGE_WIDTH (FIELD_WIDTH * TILE_SIZE_IN_PIXELS + 1)
 #define OUTPUT_IMAGE_HEIGHT (FIELD_HEIGHT * TILE_SIZE_IN_PIXELS + 1)
@@ -24,6 +26,12 @@ typedef unsigned int uint;
 #define TERABYTES(X) (1024ull * GIGABYTES(X))
 
 #define ARR_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
+
+#ifndef NDEBUG
+#define assert(x) do { if (!(x)) { abort(); } } while(0)
+#else
+#define assert(x)
+#endif
 
 typedef struct {
   bool pressed;
@@ -69,6 +77,31 @@ typedef struct {
   float velocity;
 } moving_entity_t;
 
+typedef enum {
+  GHOST_COLOR_RED,
+  GHOST_COLOR_BLUE,
+  GHOST_COLOR_GREEN,
+  GHOST_COLOR_CYAN,
+} ghost_color_t;
+
+typedef enum {
+  GHOST_STATE_INACTIVITY,
+  GHOST_STATE_CRUISING,
+  GHOST_STATE_CHAISING,
+} ghost_state_t;
+
+typedef struct {
+  moving_entity_t movement_data;
+  ghost_color_t color;
+  ghost_state_t state;
+  ivector2_t cruise_target;
+  float time_till_cruise;
+  float time_till_chase;
+  float time_till_course_correction;
+  float cur_time_till_course_correction;
+  int32_t wave_field[FIELD_HEIGHT][FIELD_WIDTH];
+} ghost_entity_t;
+
 typedef struct {
   int pacdots_left;
   int points;
@@ -79,7 +112,11 @@ typedef struct {
   moving_entity_t pacman;
   game_stat_t stat;
   uint16_t level[FIELD_HEIGHT][FIELD_WIDTH];
+  ghost_entity_t ghosts[4];
+  bool over;
+  uint game_over_color;
 } game_t;
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer);
+
 #endif

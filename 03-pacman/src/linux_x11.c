@@ -26,12 +26,6 @@
 
 #include "game.h"
 
-#ifndef NDEBUG
-#define assert(x) do { if (!(x)) { abort(); } } while(0)
-#else
-#define assert(x)
-#endif
-
 void FatalError(const char *s) {
   fprintf(stderr, "%s\n", s);
   abort();
@@ -160,11 +154,12 @@ void game_library_close(game_library_t *library) {
   }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv, char **envp) {
   const char *game_library_name = "libgame.so";
   const char *path_to_game_library;
 
   (void)argc;
+  (void)envp;
 
   {
     char exe_basedir_buffer[3 * PATH_MAX];
@@ -285,7 +280,7 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
 
 #define GAME_MEMORY_ADDRESS ((void *)(TERABYTES(32)))
-#define GAME_MEMORY_USAGE_BYTES MEGABYTES(4)
+#define GAME_MEMORY_USAGE_BYTES MEGABYTES(40)
 #define PAGE_SIZE (4 * 1024)
 
   assert((uint64_t)GAME_MEMORY_ADDRESS % PAGE_SIZE == 0);
@@ -343,6 +338,9 @@ int main(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &game_timer);
     long long passed = timespec_elapsed(&game_timer_old, &game_timer);
     input.seconds_elapsed = passed * 1e-9;
+    if (input.seconds_elapsed > 60.0 * 1e-9 * FRAME_DURATION_NANOSEC) {
+      input.seconds_elapsed = 1e-9 * FRAME_DURATION_NANOSEC;
+    }
     game_timer_old = game_timer;
 
     if (debug_input.start_recording) {

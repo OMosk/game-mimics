@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_BUILD_TYPE Debug)
 #set(CMAKE_BUILD_TYPE RelWithDebInfo)
 set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
-add_compile_options(-std=c11 -Wall -gdwarf-2 -g3 -fno-omit-frame-pointer)
+add_compile_options(-std=c11 -Wall -Wextra -gdwarf-2 -g3 -fno-omit-frame-pointer)
 
 add_library(game SHARED src/game.c)
 target_link_libraries(game m)
