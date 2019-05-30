@@ -193,7 +193,312 @@ int event_dir_filter(const struct dirent *entry) {
   return strncmp("event", entry->d_name, 5) == 0;
 }
 
+typedef struct {
+  int x_axis_min;
+  int x_axis_max;
+  int y_axis_min;
+  int y_axis_max;
+  int rx_axis_min;
+  int rx_axis_max;
+  int ry_axis_min;
+  int ry_axis_max;
+  int lt_max;
+  int rt_max;
+} gamepad_configuration_t;
 
+int look_for_gamepad(gamepad_configuration_t *configuration) {
+  int result_fd = -1;
+  const char *directory = "/dev/input";
+  struct dirent **namelist;
+  int n = scandir(directory, &namelist, event_dir_filter, alphasort);
+  if (n == -1) {
+    return result_fd;
+  }
+
+  char path[512] = {0};
+
+  while (n--) {
+    if (result_fd < 0) {
+      snprintf(path, sizeof(path)-1, "%s/%s", directory, namelist[n]->d_name);
+      int tmp_fd = open(path, O_RDONLY|O_NONBLOCK);
+      if (tmp_fd > 0) {
+        //permissions and stuff
+        unsigned long event_bits;
+        if (ioctl(tmp_fd, EVIOCGBIT(0, EV_MAX), &event_bits) != -1) {
+          if (event_bits & (1 << EV_KEY)) {
+            //key press supported
+            unsigned long bits[KEY_MAX / (sizeof(long) * 8) + 1] = {0};
+            if (ioctl(tmp_fd, EVIOCGBIT(EV_KEY, KEY_MAX), bits) != -1) {
+              if ((bits[BTN_GAMEPAD / (8 * sizeof(long))]
+                   >> (BTN_GAMEPAD % (8 * sizeof(long)))) & 1) {
+                printf("Gamepad found %s\n", path);
+
+                int abs[6] = {};
+                ioctl(tmp_fd, EVIOCGABS(ABS_X), abs);
+                configuration->x_axis_min = abs[1];
+                configuration->x_axis_max = abs[2];
+
+                ioctl(tmp_fd, EVIOCGABS(ABS_Y), abs);
+                configuration->y_axis_min = abs[1];
+                configuration->y_axis_max = abs[2];
+
+                ioctl(tmp_fd, EVIOCGABS(ABS_RX), abs);
+                configuration->rx_axis_min = abs[1];
+                configuration->rx_axis_max = abs[2];
+
+                ioctl(tmp_fd, EVIOCGABS(ABS_RY), abs);
+                configuration->ry_axis_min = abs[1];
+                configuration->ry_axis_max = abs[2];
+
+                ioctl(tmp_fd, EVIOCGABS(ABS_Z), abs);
+                configuration->lt_max = abs[2];
+
+                ioctl(tmp_fd, EVIOCGABS(ABS_RZ), abs);
+                configuration->rt_max = abs[2];
+
+                result_fd = tmp_fd;
+                tmp_fd = -1;
+              }
+            }
+          }
+        }
+        if (tmp_fd > 0) {
+          close(tmp_fd);
+        }
+      }
+    }
+
+    free(namelist[n]);
+  }
+  free(namelist);
+
+  return result_fd;
+}
+
+void handle_joystick_input(int *fd, input_t *input,
+                           gamepad_configuration_t *config) {
+  input->gamepad.a.transitions = 0;
+  input->gamepad.b.transitions = 0;
+  input->gamepad.x.transitions = 0;
+  input->gamepad.y.transitions = 0;
+  input->gamepad.dpad_up.transitions = 0;
+  input->gamepad.dpad_down.transitions = 0;
+  input->gamepad.dpad_left.transitions = 0;
+  input->gamepad.dpad_right.transitions = 0;
+  input->gamepad.start.transitions = 0;
+  input->gamepad.select.transitions = 0;
+  input->gamepad.left_bumper.transitions = 0;
+  input->gamepad.right_bumper.transitions = 0;
+  input->gamepad.right_stick_button.transitions = 0;
+  input->gamepad.left_stick_button.transitions = 0;
+
+  struct input_event ev = {};
+  int n;
+  while ( (n = read(*fd, &ev, sizeof(ev))) == sizeof(ev)) {
+    switch (ev.type) {
+    case EV_KEY: {
+      switch (ev.code) {
+      case BTN_A: {
+        if (input->gamepad.a.pressed != ev.value) {
+          input->gamepad.a.transitions++;
+        }
+        input->gamepad.a.pressed = ev.value;
+      } break;
+      case BTN_B: {
+        if (input->gamepad.b.pressed != ev.value) {
+          input->gamepad.b.transitions++;
+        }
+        input->gamepad.b.pressed = ev.value;
+      } break;
+      case BTN_X: {
+        if (input->gamepad.x.pressed != ev.value) {
+          input->gamepad.x.transitions++;
+        }
+        input->gamepad.x.pressed = ev.value;
+      } break;
+      case BTN_Y: {
+        if (input->gamepad.y.pressed != ev.value) {
+          input->gamepad.y.transitions++;
+        }
+        input->gamepad.y.pressed = ev.value;
+      } break;
+      case BTN_SELECT: {
+        if (input->gamepad.select.pressed != ev.value) {
+          input->gamepad.select.transitions++;
+        }
+        input->gamepad.select.pressed = ev.value;
+      } break;
+      case BTN_START: {
+        if (input->gamepad.start.pressed != ev.value) {
+          input->gamepad.start.transitions++;
+        }
+        input->gamepad.start.pressed = ev.value;
+      } break;
+      case BTN_DPAD_UP: {
+        if (input->gamepad.dpad_up.pressed != ev.value) {
+          input->gamepad.dpad_up.transitions++;
+        }
+        input->gamepad.dpad_up.pressed = ev.value;
+      } break;
+      case BTN_DPAD_DOWN: {
+        if (input->gamepad.dpad_down.pressed != ev.value) {
+          input->gamepad.dpad_down.transitions++;
+        }
+        input->gamepad.dpad_down.pressed = ev.value;
+      } break;
+      case BTN_DPAD_LEFT: {
+        if (input->gamepad.dpad_left.pressed != ev.value) {
+          input->gamepad.dpad_left.transitions++;
+        }
+        input->gamepad.dpad_left.pressed = ev.value;
+      } break;
+      case BTN_DPAD_RIGHT: {
+        if (input->gamepad.dpad_right.pressed != ev.value) {
+          input->gamepad.dpad_right.transitions++;
+        }
+        input->gamepad.dpad_right.pressed = ev.value;
+      } break;
+      case BTN_TR: {
+        if (input->gamepad.right_bumper.pressed != ev.value) {
+          input->gamepad.right_bumper.transitions++;
+        }
+        input->gamepad.right_bumper.pressed = ev.value;
+      } break;
+      case BTN_TL: {
+        if (input->gamepad.left_bumper.pressed != ev.value) {
+          input->gamepad.left_bumper.transitions++;
+        }
+        input->gamepad.left_bumper.pressed = ev.value;
+      } break;
+
+      case BTN_THUMBL: {
+        if (input->gamepad.left_stick_button.pressed != ev.value) {
+          input->gamepad.left_stick_button.transitions++;
+        }
+        input->gamepad.left_stick_button.pressed = ev.value;
+      } break;
+      case BTN_THUMBR: {
+        if (input->gamepad.right_stick_button.pressed != ev.value) {
+          input->gamepad.right_stick_button.transitions++;
+        }
+        input->gamepad.right_stick_button.pressed = ev.value;
+      } break;
+
+      }
+    } break;
+    case EV_ABS: {
+      switch (ev.code) {
+      case ABS_X: {
+        input->gamepad.left_stick.x = ev.value;
+        if (input->gamepad.left_stick.x < 0) {
+          input->gamepad.left_stick.x /= (-config->x_axis_min);
+        } else {
+          input->gamepad.left_stick.x /= config->x_axis_max;
+        }
+      } break;
+      case ABS_Y: {
+        input->gamepad.left_stick.y = ev.value;
+        if (input->gamepad.left_stick.y < 0) {
+          input->gamepad.left_stick.y /= (-config->y_axis_min);
+        } else {
+          input->gamepad.left_stick.y /= config->y_axis_max;
+        }
+      } break;
+      case ABS_RX: {
+        input->gamepad.right_stick.x = ev.value;
+        if (input->gamepad.right_stick.x < 0) {
+          input->gamepad.right_stick.x /= (-config->x_axis_min);
+        } else {
+          input->gamepad.right_stick.x /= config->x_axis_max;
+        }
+      } break;
+      case ABS_RY: {
+        input->gamepad.right_stick.y = ev.value;
+        if (input->gamepad.right_stick.y < 0) {
+          input->gamepad.right_stick.y /= (-config->y_axis_min);
+        } else {
+          input->gamepad.right_stick.y /= config->y_axis_max;
+        }
+      } break;
+      case ABS_Z: {
+        input->gamepad.left_trigger = (float) ev.value / config->lt_max;
+      } break;
+      case ABS_RZ: {
+        input->gamepad.right_trigger = (float) ev.value / config->rt_max;
+      } break;
+      case ABS_HAT0X: {
+        if (ev.value == 0) {
+          if (input->gamepad.dpad_left.pressed) {
+            input->gamepad.dpad_left.transitions++;
+          }
+          input->gamepad.dpad_left.pressed = false;
+          if (input->gamepad.dpad_right.pressed) {
+            input->gamepad.dpad_right.transitions++;
+          }
+          input->gamepad.dpad_right.pressed = false;
+        } else if (ev.value < 0) {
+          if (!input->gamepad.dpad_left.pressed) {
+            input->gamepad.dpad_left.transitions++;
+          }
+          input->gamepad.dpad_left.pressed = true;
+
+          if (input->gamepad.dpad_right.pressed) {
+            input->gamepad.dpad_right.transitions++;
+          }
+          input->gamepad.dpad_right.pressed = false;
+        } else if (ev.value > 0) {
+          if (!input->gamepad.dpad_right.pressed) {
+            input->gamepad.dpad_right.transitions++;
+          }
+          input->gamepad.dpad_right.pressed = true;
+
+          if (input->gamepad.dpad_left.pressed) {
+            input->gamepad.dpad_left.transitions++;
+          }
+          input->gamepad.dpad_left.pressed = false;
+        }
+      } break;
+      case ABS_HAT0Y: {
+        if (ev.value == 0) {
+          if (input->gamepad.dpad_up.pressed) {
+            input->gamepad.dpad_up.transitions++;
+          }
+          input->gamepad.dpad_up.pressed = false;
+          if (input->gamepad.dpad_down.pressed) {
+            input->gamepad.dpad_down.transitions++;
+          }
+          input->gamepad.dpad_down.pressed = false;
+        } else if (ev.value < 0) {
+          if (!input->gamepad.dpad_up.pressed) {
+            input->gamepad.dpad_up.transitions++;
+          }
+          input->gamepad.dpad_up.pressed = true;
+
+          if (input->gamepad.dpad_down.pressed) {
+            input->gamepad.dpad_down.transitions++;
+          }
+          input->gamepad.dpad_down.pressed = false;
+        } else if (ev.value > 0) {
+          if (!input->gamepad.dpad_down.pressed) {
+            input->gamepad.dpad_down.transitions++;
+          }
+          input->gamepad.dpad_down.pressed = true;
+
+          if (input->gamepad.dpad_up.pressed) {
+            input->gamepad.dpad_up.transitions++;
+          }
+          input->gamepad.dpad_up.pressed = false;
+        }
+      } break;
+      }
+    } break;
+    }
+  }
+  if (errno != EAGAIN) {
+    close(*fd);
+    *fd = -1;
+  }
+}
 
 int main(int argc, char **argv, char **envp) {
   const char *game_library_name = "libgame.so";
@@ -364,6 +669,9 @@ int main(int argc, char **argv, char **envp) {
   struct stat game_library_file_stat_new;
   stat(path_to_game_library, &game_library_file_stat_old);
 
+  gamepad_configuration_t gamepad_configuration = {};
+  int joystick_fd = look_for_gamepad(&gamepad_configuration);
+
   while(should_continue) {
     stat(path_to_game_library, &game_library_file_stat_new);
     if (game_library_file_stat_old.st_mtim.tv_sec < game_library_file_stat_new.st_mtim.tv_sec
@@ -383,6 +691,13 @@ int main(int argc, char **argv, char **envp) {
       input.seconds_elapsed = 1e-9 * FRAME_DURATION_NANOSEC;
     }
     game_timer_old = game_timer;
+
+    if (joystick_fd < 0) {
+      joystick_fd = look_for_gamepad(&gamepad_configuration);
+    }
+    if (joystick_fd >= 0) {
+      handle_joystick_input(&joystick_fd, &input, &gamepad_configuration);
+    }
 
     if (debug_input.start_recording) {
       memcpy(loop_data.memory, memory, GAME_MEMORY_USAGE_BYTES);

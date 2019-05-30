@@ -109,7 +109,75 @@ void game_init(game_t *game) {
   game->pixels_per_meter = 50.0f;
 }
 
+gamepad_input_t old = {};
+void debug_print_gamepad_state(gamepad_input_t *gamepad) {
+  bool should_print = false;
+  should_print = should_print || (old.left_stick.x != gamepad->left_stick.x);
+  should_print = should_print || (old.left_stick.y != gamepad->left_stick.y);
 
+  should_print = should_print || (old.right_stick.x != gamepad->right_stick.x);
+  should_print = should_print || (old.right_stick.y != gamepad->right_stick.y);
+
+  should_print = should_print || (old.left_trigger != gamepad->left_trigger);
+  should_print = should_print || (old.right_trigger != gamepad->right_trigger);
+
+  should_print = should_print || (gamepad->a.transitions);
+  should_print = should_print || (gamepad->b.transitions);
+  should_print = should_print || (gamepad->x.transitions);
+  should_print = should_print || (gamepad->y.transitions);
+  should_print = should_print || (gamepad->select.transitions);
+  should_print = should_print || (gamepad->start.transitions);
+  should_print = should_print || (gamepad->left_bumper.transitions);
+  should_print = should_print || (gamepad->right_bumper.transitions);
+
+  should_print = should_print || (gamepad->left_stick_button.transitions);
+  should_print = should_print || (gamepad->right_stick_button.transitions);
+
+  should_print = should_print || (gamepad->dpad_up.transitions);
+  should_print = should_print || (gamepad->dpad_down.transitions);
+  should_print = should_print || (gamepad->dpad_left.transitions);
+  should_print = should_print || (gamepad->dpad_right.transitions);
+
+  if (should_print) {
+#define BUTTON_EV(b) ((b.pressed && b.transitions % 2) ? "press" \
+                      : ((!b.pressed && b.transitions % 2) ? "release": ""))
+
+    static int i = 0;
+    printf("%d ", i++);
+
+    printf("LS (x=%f, y=%f, pr=%d, ev=%s) ",
+           gamepad->left_stick.x,
+           gamepad->left_stick.y,
+           gamepad->left_stick_button.pressed,
+           BUTTON_EV(gamepad->left_stick_button));
+
+    printf("RS (x=%f, y=%f, pr=%d, ev=%s) ",
+           gamepad->right_stick.x,
+           gamepad->right_stick.y,
+           gamepad->right_stick_button.pressed,
+           BUTTON_EV(gamepad->right_stick_button));
+
+    printf("LT %f ", gamepad->left_trigger);
+    printf("RT %f ", gamepad->right_trigger);
+
+    printf("Select (pr=%d ev=%s) ", gamepad->select.pressed, BUTTON_EV(gamepad->select));
+    printf("Start (pr=%d ev=%s) ", gamepad->start.pressed, BUTTON_EV(gamepad->start));
+    printf("A (pr=%d ev=%s) ", gamepad->a.pressed, BUTTON_EV(gamepad->a));
+    printf("B (pr=%d ev=%s) ", gamepad->b.pressed, BUTTON_EV(gamepad->b));
+    printf("X (pr=%d ev=%s) ", gamepad->x.pressed, BUTTON_EV(gamepad->x));
+    printf("Y (pr=%d ev=%s) ", gamepad->y.pressed, BUTTON_EV(gamepad->y));
+    printf("LB (pr=%d ev=%s) ", gamepad->left_bumper.pressed, BUTTON_EV(gamepad->left_bumper));
+    printf("RB (pr=%d ev=%s) ", gamepad->right_bumper.pressed, BUTTON_EV(gamepad->right_bumper));
+
+    printf("dpad_up (pr=%d ev=%s) ", gamepad->dpad_up.pressed, BUTTON_EV(gamepad->dpad_up));
+    printf("dpad_down (pr=%d ev=%s) ", gamepad->dpad_down.pressed, BUTTON_EV(gamepad->dpad_down));
+    printf("dpad_left (pr=%d ev=%s) ", gamepad->dpad_left.pressed, BUTTON_EV(gamepad->dpad_left));
+    printf("dpad_right (pr=%d ev=%s) ", gamepad->dpad_right.pressed, BUTTON_EV(gamepad->dpad_right));
+    printf("\n");
+
+  }
+  old = *gamepad;
+}
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   game_t *game = (game_t *) memory;
@@ -127,6 +195,7 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
       return;
     }
   }
+  debug_print_gamepad_state(&input->gamepad);
 
   game_render(game, buffer);
 }

@@ -44,13 +44,25 @@ typedef struct {
 
 typedef struct {
   bool pressed;
+  uint8_t transitions;
 } button_t;
+
+typedef struct {
+  button_t a, b, x, y;
+  button_t select, start;
+  button_t dpad_left, dpad_right, dpad_up, dpad_down;
+  button_t left_bumper, right_bumper;
+  float left_trigger, right_trigger;
+  vector2_t left_stick, right_stick;
+  button_t left_stick_button, right_stick_button;
+} gamepad_input_t;
 
 typedef struct {
   button_t left, right, up, down;
   float seconds_elapsed;
   bool pause;
   bool restart;
+  gamepad_input_t gamepad;
 } input_t;
 
 typedef struct {
