@@ -32,15 +32,21 @@ typedef struct {
   float x, y;
 } vector2_t;
 
+typedef vector2_t segment_t[2];
+typedef vector2_t ray_t[2];
+
 typedef struct {
   int x, y;
 } ivector2_t;
 
+#define V2(x, y) ((vector2_t){(x), (y)})
 #define VECTOR2_ADD(a, b) ((vector2_t){(a).x + (b).x, (a).y + (b).y})
 #define VECTOR2_SUB(a, b) ((vector2_t){(a).x - (b).x, (a).y - (b).y})
 #define VECTOR2_MULT_NUMBER(a, b) ((vector2_t){(a).x * (b), (a).y * (b)})
 #define VECTOR2_SCALAR_MULT(a, b) ((a).x * (b).x + (a).y * (b).y)
 #define VECTOR2_SQR_LEN(a) VECTOR2_SCALAR_MULT(a, a)
+#define V2_LEN(a) sqrtf(VECTOR2_SCALAR_MULT(a, a))
+#define V2_NORMALIZED(v) V2((v).x/V2_LEN(v), (v).y/V2_LEN(v))
 
 typedef struct {
   bool pressed;
@@ -72,8 +78,21 @@ typedef struct {
 } drawing_buffer_t;
 
 typedef struct {
+  uint8_t r, g, b, a;
+} rgba_t;
+
+typedef enum {
+  ENTITY_TYPE_MC,
+  ENTITY_TYPE_WALL,
+} entity_type_t;
+
+typedef struct {
   vector2_t pos;
-} moving_entity_t;
+  vector2_t speed;
+  vector2_t accel;
+  vector2_t size;
+  entity_type_t type;
+} entity_t;
 
 typedef struct {
   uint8_t *data;
@@ -90,14 +109,12 @@ typedef struct {
 imagebuffer_t game_decode_bmp(buffer_t buffer);
 
 typedef struct {
-  uint8_t r, g, b, a;
-} rgba_t;
-
-typedef struct {
   bool is_inited;
   bool over;
-  vector2_t pos;
-  vector2_t size;
+  gamepad_input_t gamepad_visualize_data;
+  entity_t character;
+  entity_t entities[1024];
+  uint32_t entities_count;
   float pixels_per_meter;
 } game_t;
 

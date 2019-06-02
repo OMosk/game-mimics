@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <math.h>
 #include <float.h>
+#include <limits.h>
+
 #define RGB(r, g, b) ((b) + ((g) << 8) + ((r) << 16))
 #define RGBA(r, g, b, a) ((b) + ((g) << 8) + ((r) << 16) + ((a) << 24))
 //                              B     G            R
@@ -21,6 +23,10 @@
 
 static float game_sqr(float x) {
   return x*x;
+}
+
+static float game_sqrt(float x) {
+  return sqrtf(x);
 }
 
 static int game_count_trailing_zeroes(uint32_t x) {
@@ -89,28 +95,83 @@ static void draw_bitmap(drawing_buffer_t *buffer, imagebuffer_t bitmap, int x, i
 
 }
 
+static void draw_gamepad(drawing_buffer_t *buffer, gamepad_input_t *input) {
+  draw_rectangle(buffer, 10, 10, 100, 100, RGBA(100, 100, 100, 255));
+  draw_rectangle(buffer,
+                 50 * (1.0f + input->left_stick.x),
+                 50 * (1.0f + input->left_stick.y),
+                 20, 20, RGBA(50, 50, 50, 255));
+}
+
 
 static void game_render(game_t *game, drawing_buffer_t *buffer) {
   // NOTE: most time we spend here currently
   memset(buffer->buffer, 0, buffer->width * buffer->height * sizeof(*buffer->buffer));
+  draw_gamepad(buffer, &game->gamepad_visualize_data);
 
-  draw_rectangle(buffer, game->pos.x * game->pixels_per_meter,
-                         /*buffer->height - */game->pos.y * game->pixels_per_meter,
-                         game->size.x * game->pixels_per_meter,
-                         game->size.y * game->pixels_per_meter,
+  draw_rectangle(buffer, (game->character.pos.x - 0.5) * game->pixels_per_meter,
+                         buffer->height - (game->character.pos.y - 0.5) * game->pixels_per_meter,
+                         game->character.size.x * game->pixels_per_meter,
+                         game->character.size.y * game->pixels_per_meter,
                          RGBA(255, 0, 0, 255)
                          );
+  for (uint32_t i = 0; i < game->entities_count; ++i) {
+    entity_t *e = game->entities + i;
+    switch (e->type) {
+    case ENTITY_TYPE_WALL: {
+      int x = (e->pos.x - 0.5f * e->size.x) * game->pixels_per_meter;
+      int y = buffer->height - (e->pos.y - 0.5f * e->size.y) * game->pixels_per_meter;
+      int w = e->size.x * game->pixels_per_meter;
+      int h = e->size.y * game->pixels_per_meter;
+      uint32_t color = RGBA(255, 255, 255, 255);
+
+      draw_rectangle(buffer, x, y, w, h, color);
+    } break;
+    default: {
+      assert(0);
+    }
+    }
+  }
+}
+
+static int
+game_push_entity(game_t *game, float x, float y, float w, float h, entity_type_t t) {
+  int result = INT_MAX;
+  entity_t *e = game->entities + (game->entities_count++);
+  *e = (entity_t){};
+  e->pos.x = x;
+  e->pos.y = y;
+  e->size.x = w;
+  e->size.y = h;
+  e->type = t;
+  return result;
+}
+
+static int
+game_push_mc(game_t *game, float x, float y, float w, float h) {
+  int result = game_push_entity(game, x, y, w, h, ENTITY_TYPE_MC);
+  return result;
+}
+static int
+game_push_wall(game_t *game, float x, float y, float w, float h) {
+  int result = game_push_entity(game, x, y, w, h, ENTITY_TYPE_WALL);
+  return result;
 }
 
 void game_init(game_t *game) {
   game->is_inited = true;
-  game->pos = (vector2_t){5.0f, 5.0f};
-  game->size = (vector2_t){1.0f, 1.0f};
+  game->character.pos = (vector2_t){5.0f, 5.0f};
+  game->character.speed = (vector2_t){0.0f, 0.0f};
+  game->character.accel = (vector2_t){0.0f, 0.0f};
+  game->character.size = (vector2_t){1.0f, 1.0f};
   game->pixels_per_meter = 50.0f;
+  game->entities_count = 0;
+
+  game_push_wall(game, 7.0f, 3.0f, 10.f, 1.f);
 }
 
 gamepad_input_t old = {};
-void debug_print_gamepad_state(gamepad_input_t *gamepad) {
+static void debug_print_gamepad_state(gamepad_input_t *gamepad) {
   bool should_print = false;
   should_print = should_print || (old.left_stick.x != gamepad->left_stick.x);
   should_print = should_print || (old.left_stick.y != gamepad->left_stick.y);
@@ -179,6 +240,108 @@ void debug_print_gamepad_state(gamepad_input_t *gamepad) {
   old = *gamepad;
 }
 
+static float segment_ray_intersection(segment_t segment1, ray_t ray, float def_response) {
+  float result = def_response;
+
+  segment_t segment2 = {ray[0], VECTOR2_ADD(ray[0], ray[1])};
+  float x1 = segment1[0].x;
+  float y1 = segment1[0].y;
+  float x2 = segment1[1].x;
+  float y2 = segment1[1].y;
+
+  float x3 = segment2[0].x;
+  float y3 = segment2[0].y;
+  float x4 = segment2[1].x;
+  float y4 = segment2[1].y;
+
+  float denominator = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4);
+  if (fabsf(denominator) > 1e-6f) {
+    float t = ((x1 - x3)*(y3 - y4) - (y1 - y3)*(x3 -x4))
+      / denominator;
+
+    float u = - ((x1 - x2)*(y1 - y3) - (y1 - y2)*(x1 -x3))
+      / denominator;
+
+    assert(!isnan(t));
+    assert(!isnan(u));
+    assert(!isinf(t));
+    assert(!isinf(u));
+
+    if (t >= 0 && t <= 1 && u >= 0) {
+      result = u;
+    }
+  }
+
+  return result;
+}
+
+static float collides(entity_t *stationary, entity_t *moving, vector2_t dp, float dt) {
+  float result = dt;
+  vector2_t stat_box = stationary->size;
+  vector2_t moving_box = moving->size;
+
+  stat_box.x += moving_box.x;
+  stat_box.y += moving_box.y;
+
+  vector2_t half_size = VECTOR2_MULT_NUMBER(stat_box, 0.5f);
+  /*
+   *  A  B
+   *
+   *  C  D
+   */
+  vector2_t A = VECTOR2_ADD(stationary->pos, V2(-half_size.x, half_size.y));
+  vector2_t B = VECTOR2_ADD(stationary->pos, V2(half_size.x, half_size.y));
+  vector2_t C = VECTOR2_ADD(stationary->pos, V2(-half_size.x, -half_size.y));
+  vector2_t D = VECTOR2_ADD(stationary->pos, V2(half_size.x, -half_size.y));
+
+  segment_t segments[] = {
+    {A, B}, {B, D}, {D, C}, {C, A}
+  };
+  vector2_t dot = moving->pos;
+  ray_t ray = {dot, dp};
+
+  for (uint32_t i = 0; i < ARR_LEN(segments); ++i) {
+    float tmp_result = segment_ray_intersection(segments[i], ray, dt);
+    if (tmp_result < result) {
+      result = tmp_result;
+    }
+  }
+
+  return result;
+}
+
+static void move_entity(game_t *game, entity_t *c, vector2_t direction, float dt) {
+  c->accel = VECTOR2_MULT_NUMBER(direction, 50.0f);
+  c->speed = VECTOR2_ADD(c->speed, VECTOR2_MULT_NUMBER(c->accel, dt));
+  vector2_t drag = VECTOR2_MULT_NUMBER(c->speed, -0.12f);
+  c->speed = VECTOR2_ADD(c->speed, drag);
+  float actual_dt = dt;
+
+  if (game_sqrt(VECTOR2_SQR_LEN(c->speed)) > 1e-8f) {
+    for (uint32_t i = 0; i < game->entities_count; ++i) {
+      entity_t *o = game->entities + i;
+      switch (o->type) {
+      case ENTITY_TYPE_WALL: {
+        float tmp_dt = collides(o, c, c->speed, dt);
+        if (tmp_dt < actual_dt) {
+          actual_dt = tmp_dt;
+        }
+      } break;
+      default: {
+        assert(0);
+      }
+      }
+    }
+  }
+
+  c->pos = VECTOR2_ADD(c->pos, VECTOR2_MULT_NUMBER(c->speed, actual_dt));
+  if (actual_dt != dt) {
+    vector2_t normalized_speed = V2_NORMALIZED(c->speed);
+    vector2_t stuck_offset = VECTOR2_MULT_NUMBER(normalized_speed, -0.001);
+    c->pos = VECTOR2_ADD(c->pos, stuck_offset);
+  }
+}
+
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   game_t *game = (game_t *) memory;
 
@@ -195,7 +358,14 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
       return;
     }
   }
-  debug_print_gamepad_state(&input->gamepad);
+  //debug_print_gamepad_state(&input->gamepad);
+
+  vector2_t stick_vector = input->gamepad.left_stick;
+  stick_vector.y *= -1.0f;
+
+  move_entity(game, &game->character, stick_vector, input->seconds_elapsed);
+
+  game->gamepad_visualize_data = input->gamepad;
 
   game_render(game, buffer);
 }
