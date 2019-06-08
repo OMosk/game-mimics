@@ -275,7 +275,7 @@ static float segment_ray_intersection(segment_t segment1, ray_t ray, float def_r
   return result;
 }
 
-static float collides(entity_t *stationary, entity_t *moving, vector2_t dp, float dt) {
+static float collides(entity_t *stationary, entity_t *moving, vector2_t dp, float dt, vector2_t *hit_line) {
   float result = dt;
   vector2_t stat_box = stationary->size;
   vector2_t moving_box = moving->size;
@@ -300,11 +300,18 @@ static float collides(entity_t *stationary, entity_t *moving, vector2_t dp, floa
   vector2_t dot = moving->pos;
   ray_t ray = {dot, dp};
 
+  int hit_segment = -1;
+
   for (uint32_t i = 0; i < ARR_LEN(segments); ++i) {
     float tmp_result = segment_ray_intersection(segments[i], ray, dt);
     if (tmp_result < result) {
       result = tmp_result;
+      hit_segment = i;
     }
+  }
+
+  if (hit_segment >= 0 && hit_line) {
+    *hit_line = VECTOR2_SUB(segments[hit_segment][0], segments[hit_segment][1]);
   }
 
   return result;
@@ -315,30 +322,37 @@ static void move_entity(game_t *game, entity_t *c, vector2_t direction, float dt
   c->speed = VECTOR2_ADD(c->speed, VECTOR2_MULT_NUMBER(c->accel, dt));
   vector2_t drag = VECTOR2_MULT_NUMBER(c->speed, -0.12f);
   c->speed = VECTOR2_ADD(c->speed, drag);
-  float actual_dt = dt;
+  for (int i = 0; i < 4 && dt > 1e-8f; ++i) {
+    float actual_dt = dt;
+    vector2_t new_dp = V2(0.0f, 0.0f);
 
-  if (game_sqrt(VECTOR2_SQR_LEN(c->speed)) > 1e-8f) {
-    for (uint32_t i = 0; i < game->entities_count; ++i) {
-      entity_t *o = game->entities + i;
-      switch (o->type) {
-      case ENTITY_TYPE_WALL: {
-        float tmp_dt = collides(o, c, c->speed, dt);
-        if (tmp_dt < actual_dt) {
-          actual_dt = tmp_dt;
+    if (game_sqrt(VECTOR2_SQR_LEN(c->speed)) > 1e-8f) {
+      vector2_t wall = V2(0.0f, 0.0f);
+      for (uint32_t i = 0; i < game->entities_count; ++i) {
+        entity_t *o = game->entities + i;
+        switch (o->type) {
+        case ENTITY_TYPE_WALL: {
+          float tmp_dt = collides(o, c, c->speed, dt, &wall);
+          if (tmp_dt < actual_dt) {
+            actual_dt = tmp_dt;
+            new_dp = VECTOR2_MULT_NUMBER(wall, VECTOR2_SCALAR_MULT(wall, c->speed) / VECTOR2_SQR_LEN(wall));
+          }
+        } break;
+        default: {
+          assert(0);
         }
-      } break;
-      default: {
-        assert(0);
-      }
+        }
       }
     }
-  }
 
-  c->pos = VECTOR2_ADD(c->pos, VECTOR2_MULT_NUMBER(c->speed, actual_dt));
-  if (actual_dt != dt) {
-    vector2_t normalized_speed = V2_NORMALIZED(c->speed);
-    vector2_t stuck_offset = VECTOR2_MULT_NUMBER(normalized_speed, -0.001);
-    c->pos = VECTOR2_ADD(c->pos, stuck_offset);
+    c->pos = VECTOR2_ADD(c->pos, VECTOR2_MULT_NUMBER(c->speed, actual_dt));
+    if (actual_dt != dt) {
+      vector2_t normalized_speed = V2_NORMALIZED(c->speed);
+      vector2_t stuck_offset = VECTOR2_MULT_NUMBER(normalized_speed, -0.001f);
+      c->pos = VECTOR2_ADD(c->pos, stuck_offset);
+      c->speed = new_dp;
+    }
+    dt -= actual_dt;
   }
 }
 
@@ -361,6 +375,25 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   //debug_print_gamepad_state(&input->gamepad);
 
   vector2_t stick_vector = input->gamepad.left_stick;
+  if (V2_LEN(stick_vector) < 1e-9) {
+    stick_vector.x = 0.0f;
+    stick_vector.y = 0.0f;
+    if (input->left.pressed) {
+      stick_vector.x += -1.0f;
+    }
+    if (input->right.pressed) {
+      stick_vector.x += 1.0f;
+    }
+    if (input->up.pressed) {
+      stick_vector.y += -1.0f;
+    }
+    if (input->down.pressed) {
+      stick_vector.y += 1.0f;
+    }
+    if (V2_LEN(stick_vector) >= 1) {
+      stick_vector = V2_NORMALIZED(stick_vector);
+    }
+  }
   stick_vector.y *= -1.0f;
 
   move_entity(game, &game->character, stick_vector, input->seconds_elapsed);
