@@ -9,8 +9,8 @@ typedef unsigned int uint;
 #define GAME_NAME "Platformer"
 #define FRAME_DURATION_NANOSEC 16600000
 
-#define OUTPUT_IMAGE_WIDTH 800
-#define OUTPUT_IMAGE_HEIGHT 600
+#define OUTPUT_IMAGE_WIDTH 1920
+#define OUTPUT_IMAGE_HEIGHT 1080
 
 #define BYTES(X) (X)
 #define MEGABYTES(X) (1024ull * BYTES(X))
@@ -92,6 +92,7 @@ typedef struct {
   vector2_t accel;
   vector2_t size;
   entity_type_t type;
+  rgba_t color;
 } entity_t;
 
 typedef struct {
@@ -112,8 +113,9 @@ typedef struct {
   bool is_inited;
   bool over;
   gamepad_input_t gamepad_visualize_data;
+  vector2_t camera_center;
   entity_t character;
-  entity_t entities[1024];
+  entity_t entities[512];
   uint32_t entities_count;
   float pixels_per_meter;
 } game_t;

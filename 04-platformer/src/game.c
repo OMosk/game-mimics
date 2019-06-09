@@ -103,29 +103,58 @@ static void draw_gamepad(drawing_buffer_t *buffer, gamepad_input_t *input) {
                  20, 20, RGBA(50, 50, 50, 255));
 }
 
+typedef struct {
+  vector2_t top_left;
+  vector2_t size;
+} rectangle_t;
+
+static rectangle_t translate_coords(game_t *game, drawing_buffer_t *buffer, entity_t *e) {
+  rectangle_t result = {};
+  float buffer_h = buffer->height;
+  float pixels_per_meter = game->pixels_per_meter;
+
+  result.top_left.x = (e->pos.x - e->size.x * 0.5f) * pixels_per_meter;
+  result.top_left.y = buffer_h - (e->pos.y + e->size.y * 0.5f) * pixels_per_meter;
+
+  result.size.x = e->size.x * pixels_per_meter;
+  result.size.y = e->size.y * pixels_per_meter;
+  return result;
+}
+
+static vector2_t translate_point_coords(game_t *game, drawing_buffer_t *buffer, vector2_t point) {
+  vector2_t result = {};
+  float buffer_h = buffer->height;
+  float pixels_per_meter = game->pixels_per_meter;
+
+  result.x = point.x * pixels_per_meter;
+  result.y = buffer_h - point.y * pixels_per_meter;
+
+  return result;
+}
 
 static void game_render(game_t *game, drawing_buffer_t *buffer) {
   // NOTE: most time we spend here currently
   memset(buffer->buffer, 0, buffer->width * buffer->height * sizeof(*buffer->buffer));
   draw_gamepad(buffer, &game->gamepad_visualize_data);
 
-  draw_rectangle(buffer, (game->character.pos.x - 0.5) * game->pixels_per_meter,
-                         buffer->height - (game->character.pos.y - 0.5) * game->pixels_per_meter,
-                         game->character.size.x * game->pixels_per_meter,
-                         game->character.size.y * game->pixels_per_meter,
-                         RGBA(255, 0, 0, 255)
-                         );
+  rectangle_t char_rect = translate_coords(game, buffer, &game->character);
+  vector2_t camera_coords = translate_point_coords(game, buffer, game->camera_center);
+
+  vector2_t offset_pixels = V2(-camera_coords.x + buffer->width * 0.5f, 0.0f);
+
+  draw_rectangle(buffer,
+                 char_rect.top_left.x + offset_pixels.x, char_rect.top_left.y + offset_pixels.y,
+                 char_rect.size.x, char_rect.size.y,
+                 RGBA(255, 0, 0, 255)
+                );
   for (uint32_t i = 0; i < game->entities_count; ++i) {
     entity_t *e = game->entities + i;
     switch (e->type) {
     case ENTITY_TYPE_WALL: {
-      int x = (e->pos.x - 0.5f * e->size.x) * game->pixels_per_meter;
-      int y = buffer->height - (e->pos.y - 0.5f * e->size.y) * game->pixels_per_meter;
-      int w = e->size.x * game->pixels_per_meter;
-      int h = e->size.y * game->pixels_per_meter;
-      uint32_t color = RGBA(255, 255, 255, 255);
+      rectangle_t r = translate_coords(game, buffer, e);
+      uint32_t color = RGBA(e->color.r, e->color.g, e->color.b, e->color.a);
 
-      draw_rectangle(buffer, x, y, w, h, color);
+      draw_rectangle(buffer, r.top_left.x + offset_pixels.x, r.top_left.y + offset_pixels.y, r.size.x, r.size.y, color);
     } break;
     default: {
       assert(0);
@@ -135,7 +164,7 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
 }
 
 static int
-game_push_entity(game_t *game, float x, float y, float w, float h, entity_type_t t) {
+game_push_entity(game_t *game, float x, float y, float w, float h, entity_type_t t, rgba_t color) {
   int result = INT_MAX;
   entity_t *e = game->entities + (game->entities_count++);
   *e = (entity_t){};
@@ -144,30 +173,44 @@ game_push_entity(game_t *game, float x, float y, float w, float h, entity_type_t
   e->size.x = w;
   e->size.y = h;
   e->type = t;
+  e->color = color;
   return result;
 }
 
 static int
 game_push_mc(game_t *game, float x, float y, float w, float h) {
-  int result = game_push_entity(game, x, y, w, h, ENTITY_TYPE_MC);
+  int result = game_push_entity(game, x, y, w, h, ENTITY_TYPE_MC, (rgba_t){0, 0, 0, 0});
   return result;
 }
 static int
 game_push_wall(game_t *game, float x, float y, float w, float h) {
-  int result = game_push_entity(game, x, y, w, h, ENTITY_TYPE_WALL);
+  int result = game_push_entity(game, x, y, w, h, ENTITY_TYPE_WALL,
+                                (rgba_t){0, rand()%255, rand()%255, 255});
+  return result;
+}
+
+static int
+game_push_wall_by_top_left(game_t *game, float x, float y, float w, float h) {
+  int result = game_push_wall(game, x + w/2.f, y - h/2.f, w, h);
   return result;
 }
 
 void game_init(game_t *game) {
   game->is_inited = true;
-  game->character.pos = (vector2_t){5.0f, 5.0f};
   game->character.speed = (vector2_t){0.0f, 0.0f};
   game->character.accel = (vector2_t){0.0f, 0.0f};
-  game->character.size = (vector2_t){1.0f, 1.0f};
   game->pixels_per_meter = 50.0f;
   game->entities_count = 0;
+  game->character.pos = (vector2_t){5.0f, 3.525f};
+  game->character.size = (vector2_t){1.0f, 1.0f};
 
-  game_push_wall(game, 7.0f, 3.0f, 10.f, 1.f);
+  game_push_wall_by_top_left(game, 0.0f, 3.0f, 30.0f, 3.0f);
+
+  game_push_wall_by_top_left(game, 15.0f, 6.0f, 1.0f, 3.0f);
+
+  game_push_wall_by_top_left(game, 25.0f, 4.0f, 3.0f, 1.0f);
+  game_push_wall_by_top_left(game, 26.0f, 5.0f, 2.0f, 1.0f);
+  game_push_wall_by_top_left(game, 27.0f, 6.0f, 1.0f, 1.0f);
 }
 
 gamepad_input_t old = {};
@@ -277,22 +320,24 @@ static float segment_ray_intersection(segment_t segment1, ray_t ray, float def_r
 
 static float collides(entity_t *stationary, entity_t *moving, vector2_t dp, float dt, vector2_t *hit_line) {
   float result = dt;
-  vector2_t stat_box = stationary->size;
-  vector2_t moving_box = moving->size;
 
-  stat_box.x += moving_box.x;
-  stat_box.y += moving_box.y;
+ // vector2_t stationary_center = VECTOR2_ADD(stationary->pos,
+ //   V2(stationary->size.x * 0.5f, -stationary->size.y * 0.5f));
+
+  vector2_t stationary_center = stationary->pos; // X
+
+  vector2_t stat_box = VECTOR2_ADD(stationary->size, moving->size);
 
   vector2_t half_size = VECTOR2_MULT_NUMBER(stat_box, 0.5f);
   /*
-   *  A  B
-   *
-   *  C  D
+   *  A   B
+   *    X
+   *  C   D
    */
-  vector2_t A = VECTOR2_ADD(stationary->pos, V2(-half_size.x, half_size.y));
-  vector2_t B = VECTOR2_ADD(stationary->pos, V2(half_size.x, half_size.y));
-  vector2_t C = VECTOR2_ADD(stationary->pos, V2(-half_size.x, -half_size.y));
-  vector2_t D = VECTOR2_ADD(stationary->pos, V2(half_size.x, -half_size.y));
+  vector2_t A = VECTOR2_ADD(stationary_center, V2(-half_size.x, half_size.y));
+  vector2_t B = VECTOR2_ADD(stationary_center, V2(half_size.x, half_size.y));
+  vector2_t C = VECTOR2_ADD(stationary_center, V2(-half_size.x, -half_size.y));
+  vector2_t D = VECTOR2_ADD(stationary_center, V2(half_size.x, -half_size.y));
 
   segment_t segments[] = {
     {A, B}, {B, D}, {D, C}, {C, A}
@@ -399,6 +444,9 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   move_entity(game, &game->character, stick_vector, input->seconds_elapsed);
 
   game->gamepad_visualize_data = input->gamepad;
+
+  game->camera_center.x = game->character.pos.x;
+  game->camera_center.y = 0;
 
   game_render(game, buffer);
 }
