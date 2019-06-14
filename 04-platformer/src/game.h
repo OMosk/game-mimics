@@ -86,6 +86,12 @@ typedef enum {
   ENTITY_TYPE_WALL,
 } entity_type_t;
 
+typedef enum {
+  COLLISION_STATE_BOTTOM = (1 << 0),
+  COLLISION_STATE_LEFT = (1 << 1),
+  COLLISION_STATE_RIGHT = (1 << 2),
+} collision_state_t;
+
 typedef struct {
   vector2_t pos;
   vector2_t speed;
@@ -93,6 +99,7 @@ typedef struct {
   vector2_t size;
   entity_type_t type;
   rgba_t color;
+  uint32_t collision_state;
 } entity_t;
 
 typedef struct {

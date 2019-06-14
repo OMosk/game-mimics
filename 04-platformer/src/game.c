@@ -142,10 +142,19 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
 
   vector2_t offset_pixels = V2(-camera_coords.x + buffer->width * 0.5f, 0.0f);
 
+  uint32_t mc_color = RGBA(255, 0, 0, 255);
+  if (game->character.collision_state & COLLISION_STATE_LEFT ||
+      game->character.collision_state & COLLISION_STATE_RIGHT) {
+    mc_color |= RGBA(0, 255, 0, 255);
+  }
+  if (game->character.collision_state & COLLISION_STATE_BOTTOM) {
+    mc_color |= RGBA(0, 0, 255, 255);
+  }
+
   draw_rectangle(buffer,
                  char_rect.top_left.x + offset_pixels.x, char_rect.top_left.y + offset_pixels.y,
                  char_rect.size.x, char_rect.size.y,
-                 RGBA(255, 0, 0, 255)
+                 mc_color
                 );
   for (uint32_t i = 0; i < game->entities_count; ++i) {
     entity_t *e = game->entities + i;
@@ -318,7 +327,9 @@ static float segment_ray_intersection(segment_t segment1, ray_t ray, float def_r
   return result;
 }
 
-static float collides(entity_t *stationary, entity_t *moving, vector2_t dp, float dt, vector2_t *hit_line) {
+static float
+get_collision_time(entity_t *stationary, entity_t *moving,
+                   vector2_t dp, float dt, vector2_t *hit_line) {
   float result = dt;
 
  // vector2_t stationary_center = VECTOR2_ADD(stationary->pos,
@@ -327,6 +338,7 @@ static float collides(entity_t *stationary, entity_t *moving, vector2_t dp, floa
   vector2_t stationary_center = stationary->pos; // X
 
   vector2_t stat_box = VECTOR2_ADD(stationary->size, moving->size);
+  stat_box = VECTOR2_ADD(stat_box, V2(-0.01f, -0.01f));
 
   vector2_t half_size = VECTOR2_MULT_NUMBER(stat_box, 0.5f);
   /*
@@ -362,11 +374,86 @@ static float collides(entity_t *stationary, entity_t *moving, vector2_t dp, floa
   return result;
 }
 
+static float
+point_to_segment_distance_sqr(segment_t segment, vector2_t point) {
+  float result = 0.0f;
+  vector2_t v = VECTOR2_SUB(point, segment[0]);
+  vector2_t s = VECTOR2_SUB(segment[1], segment[0]);
+
+  vector2_t proj = VECTOR2_MULT_NUMBER(s,
+    VECTOR2_SCALAR_MULT(v, s) / VECTOR2_SQR_LEN(s));
+
+  vector2_t intersection_point = VECTOR2_ADD(segment[0], proj);
+
+  float AB_len = game_sqrt(VECTOR2_SQR_LEN(VECTOR2_SUB(segment[1], segment[0])));
+  float AX_len = game_sqrt(VECTOR2_SQR_LEN(VECTOR2_SUB(intersection_point, segment[0])));
+  float XB_len = game_sqrt(VECTOR2_SQR_LEN(VECTOR2_SUB(segment[1], intersection_point)));
+
+  if (fabs(AB_len - AX_len - XB_len) < 1e-4) {
+    //intersection inside segment
+    result = VECTOR2_SQR_LEN(VECTOR2_SUB(intersection_point, point));
+  } else {
+    float d1 = VECTOR2_SQR_LEN(VECTOR2_SUB(segment[0], point));
+    float d2 = VECTOR2_SQR_LEN(VECTOR2_SUB(segment[1], point));
+    result = MIN(d1, d2);
+  }
+
+  return result;
+}
+
+static bool
+is_colliding(entity_t *stationary, entity_t *moving, float epsilon,
+             vector2_t *hit_line) {
+  bool result = false;
+
+  vector2_t stationary_center = stationary->pos; // X
+
+  vector2_t stat_box = VECTOR2_ADD(stationary->size, moving->size);
+  stat_box = VECTOR2_ADD(stat_box, V2(-0.01f, -0.01f));
+
+  vector2_t half_size = VECTOR2_MULT_NUMBER(stat_box, 0.5f);
+  /*
+   *  A   B
+   *    X
+   *  C   D
+   */
+  vector2_t A = VECTOR2_ADD(stationary_center, V2(-half_size.x, half_size.y));
+  vector2_t B = VECTOR2_ADD(stationary_center, V2(half_size.x, half_size.y));
+  vector2_t C = VECTOR2_ADD(stationary_center, V2(-half_size.x, -half_size.y));
+  vector2_t D = VECTOR2_ADD(stationary_center, V2(half_size.x, -half_size.y));
+
+  segment_t segments[] = {
+    {A, B}, {B, D}, {D, C}, {C, A}
+  };
+  vector2_t dot = moving->pos;
+
+  int hit_segment = -1;
+
+  float min_distance = FLT_MAX;
+
+  for (uint32_t i = 0; i < ARR_LEN(segments); ++i) {
+    float tmp_result = point_to_segment_distance_sqr(segments[i], dot);
+    if (tmp_result < min_distance) {
+      min_distance = tmp_result;
+      hit_segment = i;
+    }
+  }
+
+  result = (min_distance < epsilon);
+  if (result && hit_segment >= 0 && hit_line) {
+    *hit_line = VECTOR2_SUB(segments[hit_segment][0], segments[hit_segment][1]);
+  }
+
+  return result;
+}
+
 static void move_entity(game_t *game, entity_t *c, vector2_t direction, float dt) {
   c->accel = VECTOR2_MULT_NUMBER(direction, 50.0f);
+  c->accel = VECTOR2_ADD(c->accel, V2(0.0f, -9.8f));
   c->speed = VECTOR2_ADD(c->speed, VECTOR2_MULT_NUMBER(c->accel, dt));
   vector2_t drag = VECTOR2_MULT_NUMBER(c->speed, -0.12f);
   c->speed = VECTOR2_ADD(c->speed, drag);
+
   for (int i = 0; i < 4 && dt > 1e-8f; ++i) {
     float actual_dt = dt;
     vector2_t new_dp = V2(0.0f, 0.0f);
@@ -377,10 +464,11 @@ static void move_entity(game_t *game, entity_t *c, vector2_t direction, float dt
         entity_t *o = game->entities + i;
         switch (o->type) {
         case ENTITY_TYPE_WALL: {
-          float tmp_dt = collides(o, c, c->speed, dt, &wall);
+          float tmp_dt = get_collision_time(o, c, c->speed, dt, &wall);
           if (tmp_dt < actual_dt) {
             actual_dt = tmp_dt;
-            new_dp = VECTOR2_MULT_NUMBER(wall, VECTOR2_SCALAR_MULT(wall, c->speed) / VECTOR2_SQR_LEN(wall));
+            new_dp = VECTOR2_MULT_NUMBER(wall,
+              VECTOR2_SCALAR_MULT(wall, c->speed) / VECTOR2_SQR_LEN(wall));
           }
         } break;
         default: {
@@ -442,6 +530,27 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   stick_vector.y *= -1.0f;
 
   move_entity(game, &game->character, stick_vector, input->seconds_elapsed);
+
+  game->character.collision_state = 0;
+
+  for (uint i = 0; i < game->entities_count; ++i) {
+    entity_t *e = game->entities + i;
+    vector2_t wall = V2(0.0f, 0.0f);
+    if (is_colliding(e, &game->character, 1e-2, &wall)) {
+      if (fabs(wall.x) < 1e-9) {
+        if (wall.x < e->pos.x) {
+          game->character.collision_state |= COLLISION_STATE_LEFT;
+        } else {
+          game->character.collision_state |= COLLISION_STATE_RIGHT;
+        }
+      }
+      if (fabs(wall.y) < 1e-9) {
+        if (wall.y < e->pos.y) {
+          game->character.collision_state |= COLLISION_STATE_BOTTOM;
+        }
+      }
+    }
+  }
 
   game->gamepad_visualize_data = input->gamepad;
 
