@@ -33,6 +33,11 @@ static int game_count_trailing_zeroes(uint32_t x) {
   return __builtin_ctz(x);
 }
 
+static bool was_pressed(button_t b) {
+  return (b.pressed && b.transitions > 0)
+    || (!b.pressed && b.transitions > 0 && b.transitions % 2 == 0);
+}
+
 static void draw_rectangle(drawing_buffer_t *buffer, int x, int y,
                            int width, int height, uint32_t color) {
   int x2 = x + width;
@@ -213,13 +218,15 @@ void game_init(game_t *game) {
   game->character.pos = (vector2_t){5.0f, 3.525f};
   game->character.size = (vector2_t){1.0f, 1.0f};
 
-  game_push_wall_by_top_left(game, 0.0f, 3.0f, 30.0f, 3.0f);
+  game_push_wall_by_top_left(game, 0.0f, 3.0f, 60.0f, 3.0f);
 
   game_push_wall_by_top_left(game, 15.0f, 6.0f, 1.0f, 3.0f);
 
   game_push_wall_by_top_left(game, 25.0f, 4.0f, 3.0f, 1.0f);
   game_push_wall_by_top_left(game, 26.0f, 5.0f, 2.0f, 1.0f);
   game_push_wall_by_top_left(game, 27.0f, 6.0f, 1.0f, 1.0f);
+
+  game_push_wall_by_top_left(game, 35.0f, 13.0f, 1.0f, 10.0f);
 }
 
 gamepad_input_t old = {};
@@ -403,7 +410,7 @@ point_to_segment_distance_sqr(segment_t segment, vector2_t point) {
 
 static bool
 is_colliding(entity_t *stationary, entity_t *moving, float epsilon,
-             vector2_t *hit_line) {
+             segment_t *hit_line) {
   bool result = false;
 
   vector2_t stationary_center = stationary->pos; // X
@@ -441,18 +448,29 @@ is_colliding(entity_t *stationary, entity_t *moving, float epsilon,
 
   result = (min_distance < epsilon);
   if (result && hit_segment >= 0 && hit_line) {
-    *hit_line = VECTOR2_SUB(segments[hit_segment][0], segments[hit_segment][1]);
+    //*hit_line = VECTOR2_SUB(segments[hit_segment][0], segments[hit_segment][1]);
+    (*hit_line)[0] = segments[hit_segment][0];
+    (*hit_line)[1] = segments[hit_segment][1];
   }
 
   return result;
 }
 
-static void move_entity(game_t *game, entity_t *c, vector2_t direction, float dt) {
-  c->accel = VECTOR2_MULT_NUMBER(direction, 50.0f);
-  c->accel = VECTOR2_ADD(c->accel, V2(0.0f, -9.8f));
+typedef struct {
+  vector2_t acceleration;
+  vector2_t gravity;
+  vector2_t drag;
+  vector2_t max_speed;
+} movement_spec_t;
+
+static void move_entity(game_t *game, entity_t *c, movement_spec_t *spec, float dt) {
+  c->accel = VECTOR2_ADD(spec->acceleration, spec->gravity);
   c->speed = VECTOR2_ADD(c->speed, VECTOR2_MULT_NUMBER(c->accel, dt));
-  vector2_t drag = VECTOR2_MULT_NUMBER(c->speed, -0.12f);
+  vector2_t drag = V2(c->speed.x * spec->drag.x * dt, c->speed.y * spec->drag.y * dt);
   c->speed = VECTOR2_ADD(c->speed, drag);
+  if (fabsf(c->speed.x) > spec->max_speed.x) {
+    c->speed.x = spec->max_speed.x * (spec->max_speed.x / c->speed.x);
+  }
 
   for (int i = 0; i < 4 && dt > 1e-8f; ++i) {
     float actual_dt = dt;
@@ -508,6 +526,7 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   //debug_print_gamepad_state(&input->gamepad);
 
   vector2_t stick_vector = input->gamepad.left_stick;
+  stick_vector.y = 0.0f;
   if (V2_LEN(stick_vector) < 1e-9) {
     stick_vector.x = 0.0f;
     stick_vector.y = 0.0f;
@@ -517,35 +536,81 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
     if (input->right.pressed) {
       stick_vector.x += 1.0f;
     }
+    /*
     if (input->up.pressed) {
       stick_vector.y += -1.0f;
     }
     if (input->down.pressed) {
       stick_vector.y += 1.0f;
     }
+    */
     if (V2_LEN(stick_vector) >= 1) {
       stick_vector = V2_NORMALIZED(stick_vector);
     }
   }
   stick_vector.y *= -1.0f;
 
-  move_entity(game, &game->character, stick_vector, input->seconds_elapsed);
+  movement_spec_t mspec = {};
+  mspec.max_speed.x = 10.0f;
+  float horizontal_acceleration = 0.0f;
+  if (game->character.collision_state & COLLISION_STATE_BOTTOM) {
+    horizontal_acceleration = 93.0f;
+  } else {
+    horizontal_acceleration = 50.0f;
+  }
+  mspec.acceleration.x = stick_vector.x * horizontal_acceleration;
+  if (was_pressed(input->gamepad.a)
+      && (game->character.collision_state & COLLISION_STATE_BOTTOM)) {
+    mspec.acceleration.y = 7.0e2f;
+  }
+  float side_accelaration_on_wall_jump = 300.0f;
+  float upward_accelaration_on_wall_jump = 600.0f;
+  if (was_pressed(input->gamepad.a)
+      && ((game->character.collision_state & COLLISION_STATE_BOTTOM) == 0)
+      && (game->character.collision_state & COLLISION_STATE_LEFT)) {
+    mspec.acceleration.y = upward_accelaration_on_wall_jump;
+    mspec.acceleration.x = side_accelaration_on_wall_jump;
+    game->character.speed.y = 0.0f;
+  }
+  if (was_pressed(input->gamepad.a)
+      && ((game->character.collision_state & COLLISION_STATE_BOTTOM) == 0)
+      && (game->character.collision_state & COLLISION_STATE_RIGHT)) {
+    mspec.acceleration.y = upward_accelaration_on_wall_jump;
+    mspec.acceleration.x = -side_accelaration_on_wall_jump;
+    game->character.speed.y = 0.0f;
+  }
+
+
+  mspec.gravity = V2(0.0f, -20.0f);
+  if ((game->character.collision_state & COLLISION_STATE_BOTTOM) != 0) {
+    //mspec.drag.x = -6.875;//-0.11f;
+    mspec.drag.x = -5.25;//-0.02f;
+  } else {
+    mspec.drag.x = -1.25;//-0.02f;
+  }
+
+  if (game->character.collision_state == 0) {
+    mspec.acceleration.x *= 0.5f;
+  }
+
+  move_entity(game, &game->character, &mspec, input->seconds_elapsed);
+  //move_entity(game, &game->character, stick_vector, input->seconds_elapsed);
 
   game->character.collision_state = 0;
 
   for (uint i = 0; i < game->entities_count; ++i) {
     entity_t *e = game->entities + i;
-    vector2_t wall = V2(0.0f, 0.0f);
+    segment_t wall = {};
     if (is_colliding(e, &game->character, 1e-2, &wall)) {
-      if (fabs(wall.x) < 1e-9) {
-        if (wall.x < e->pos.x) {
+      if (fabs(wall[0].x - wall[1].x) < 1e-9) {
+        if (wall[0].x < game->character.pos.x) {
           game->character.collision_state |= COLLISION_STATE_LEFT;
         } else {
           game->character.collision_state |= COLLISION_STATE_RIGHT;
         }
       }
-      if (fabs(wall.y) < 1e-9) {
-        if (wall.y < e->pos.y) {
+      if (fabs(wall[0].y - wall[1].y) < 1e-9) {
+        if (wall[0].y < game->character.pos.y) {
           game->character.collision_state |= COLLISION_STATE_BOTTOM;
         }
       }
