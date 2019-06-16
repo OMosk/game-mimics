@@ -110,7 +110,8 @@ static void draw_gamepad(drawing_buffer_t *buffer, gamepad_input_t *input, game_
                  50 * (1.0f + input->left_stick.x),
                  50 * (1.0f + input->left_stick.y),
                  20, 20, RGBA(200, 0, 0, 255));
-  if (game->a_button_timer > 0.0f) {
+  //if (game->a_button_timer > 0.0f) {
+  if (input->a.pressed) {
     draw_rectangle(buffer, 150, 30, 40, 40, RGBA(200, 0, 0, 255));
   }
 }
