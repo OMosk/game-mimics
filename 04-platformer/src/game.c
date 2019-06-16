@@ -29,6 +29,10 @@ static float game_sqrt(float x) {
   return sqrtf(x);
 }
 
+static float game_floor(float x) {
+  return floorf(x);
+}
+
 static int game_count_trailing_zeroes(uint32_t x) {
   return __builtin_ctz(x);
 }
@@ -100,12 +104,15 @@ static void draw_bitmap(drawing_buffer_t *buffer, imagebuffer_t bitmap, int x, i
 
 }
 
-static void draw_gamepad(drawing_buffer_t *buffer, gamepad_input_t *input) {
+static void draw_gamepad(drawing_buffer_t *buffer, gamepad_input_t *input, game_t *game) {
   draw_rectangle(buffer, 10, 10, 100, 100, RGBA(100, 100, 100, 255));
   draw_rectangle(buffer,
                  50 * (1.0f + input->left_stick.x),
                  50 * (1.0f + input->left_stick.y),
-                 20, 20, RGBA(50, 50, 50, 255));
+                 20, 20, RGBA(200, 0, 0, 255));
+  if (game->a_button_timer > 0.0f) {
+    draw_rectangle(buffer, 150, 30, 40, 40, RGBA(200, 0, 0, 255));
+  }
 }
 
 typedef struct {
@@ -140,10 +147,9 @@ static vector2_t translate_point_coords(game_t *game, drawing_buffer_t *buffer, 
 static void game_render(game_t *game, drawing_buffer_t *buffer) {
   // NOTE: most time we spend here currently
   memset(buffer->buffer, 0, buffer->width * buffer->height * sizeof(*buffer->buffer));
-  draw_gamepad(buffer, &game->gamepad_visualize_data);
 
   rectangle_t char_rect = translate_coords(game, buffer, &game->character);
-  vector2_t camera_coords = translate_point_coords(game, buffer, game->camera_center);
+  vector2_t camera_coords = translate_point_coords(game, buffer, game->camera.current_position);
 
   vector2_t offset_pixels = V2(-camera_coords.x + buffer->width * 0.5f, 0.0f);
 
@@ -175,6 +181,8 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
     }
     }
   }
+
+  draw_gamepad(buffer, &game->gamepad_visualize_data, game);
 }
 
 static int
@@ -199,7 +207,7 @@ game_push_mc(game_t *game, float x, float y, float w, float h) {
 static int
 game_push_wall(game_t *game, float x, float y, float w, float h) {
   int result = game_push_entity(game, x, y, w, h, ENTITY_TYPE_WALL,
-                                (rgba_t){0, rand()%255, rand()%255, 255});
+                                (rgba_t){0, 100 + rand()%100, 100 + rand()%100, 255});
   return result;
 }
 
@@ -208,6 +216,32 @@ game_push_wall_by_top_left(game_t *game, float x, float y, float w, float h) {
   int result = game_push_wall(game, x + w/2.f, y - h/2.f, w, h);
   return result;
 }
+
+static float lerp(float a, float b, float t) {
+  return a + t*(b - a);
+}
+
+static void camera_update(game_t *game, float dt) {
+  game->camera.camera_target.x = game->character.pos.x + game_floor(0.2f * (OUTPUT_IMAGE_WIDTH / game->pixels_per_meter));
+  game->camera.camera_target.y = 0.0f;
+
+  float coeff = 10.0f * dt;
+
+  game->camera.current_position.x = lerp(game->camera.current_position.x,
+                                         game->camera.camera_target.x,
+                                         coeff);
+  game->camera.current_position.y = lerp(game->camera.current_position.y,
+                                         game->camera.camera_target.y,
+                                         coeff);
+}
+
+static void camera_init(game_t *game) {
+  game->camera.camera_target.x = game->character.pos.x + game_floor(0.2f * (OUTPUT_IMAGE_WIDTH / game->pixels_per_meter));
+  game->camera.camera_target.y = 0.0f;
+
+  game->camera.current_position = game->camera.camera_target;
+}
+
 
 void game_init(game_t *game) {
   game->is_inited = true;
@@ -227,6 +261,11 @@ void game_init(game_t *game) {
   game_push_wall_by_top_left(game, 27.0f, 6.0f, 1.0f, 1.0f);
 
   game_push_wall_by_top_left(game, 35.0f, 13.0f, 1.0f, 10.0f);
+
+  game_push_wall_by_top_left(game, 45.0f, 20.0f, 1.0f, 15.0f);
+  game_push_wall_by_top_left(game, 49.0f, 18.0f, 1.0f, 15.0f);
+
+  camera_init(game);
 }
 
 gamepad_input_t old = {};
@@ -618,9 +657,14 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   }
 
   game->gamepad_visualize_data = input->gamepad;
+  if (game->a_button_timer > 0.0f) {
+    game->a_button_timer -= input->seconds_elapsed;
+  }
+  if (was_pressed(input->gamepad.a) || input->gamepad.a.pressed) {
+    game->a_button_timer = 0.100f;
+  }
 
-  game->camera_center.x = game->character.pos.x;
-  game->camera_center.y = 0;
+  camera_update(game, input->seconds_elapsed);
 
   game_render(game, buffer);
 }

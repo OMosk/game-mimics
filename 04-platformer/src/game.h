@@ -117,10 +117,16 @@ typedef struct {
 imagebuffer_t game_decode_bmp(buffer_t buffer);
 
 typedef struct {
+  vector2_t camera_target;
+  vector2_t current_position;
+} camera_t;
+
+typedef struct {
   bool is_inited;
   bool over;
   gamepad_input_t gamepad_visualize_data;
-  vector2_t camera_center;
+  float a_button_timer;
+  camera_t camera;
   entity_t character;
   entity_t entities[512];
   uint32_t entities_count;
