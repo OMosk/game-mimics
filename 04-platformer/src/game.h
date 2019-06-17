@@ -125,7 +125,6 @@ typedef struct {
   bool is_inited;
   bool over;
   gamepad_input_t gamepad_visualize_data;
-  float a_button_timer;
   camera_t camera;
   entity_t character;
   entity_t entities[512];

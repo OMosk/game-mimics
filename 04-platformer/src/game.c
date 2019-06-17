@@ -104,7 +104,7 @@ static void draw_bitmap(drawing_buffer_t *buffer, imagebuffer_t bitmap, int x, i
 
 }
 
-static void draw_gamepad(drawing_buffer_t *buffer, gamepad_input_t *input, game_t *game) {
+static void draw_gamepad(drawing_buffer_t *buffer, gamepad_input_t *input) {
   draw_rectangle(buffer, 10, 10, 100, 100, RGBA(100, 100, 100, 255));
   draw_rectangle(buffer,
                  50 * (1.0f + input->left_stick.x),
@@ -183,7 +183,7 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
     }
   }
 
-  draw_gamepad(buffer, &game->gamepad_visualize_data, game);
+  draw_gamepad(buffer, &game->gamepad_visualize_data);
 }
 
 static int
@@ -658,13 +658,6 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   }
 
   game->gamepad_visualize_data = input->gamepad;
-  if (game->a_button_timer > 0.0f) {
-    game->a_button_timer -= input->seconds_elapsed;
-  }
-  if (was_pressed(input->gamepad.a) || input->gamepad.a.pressed) {
-    game->a_button_timer = 0.100f;
-  }
-
   camera_update(game, input->seconds_elapsed);
 
   game_render(game, buffer);
