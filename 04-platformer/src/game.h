@@ -130,6 +130,7 @@ typedef struct {
   entity_t entities[512];
   uint32_t entities_count;
   float pixels_per_meter;
+  float jump_input_timer;
 } game_t;
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer);

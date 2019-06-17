@@ -599,25 +599,36 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
     horizontal_acceleration = 50.0f;
   }
   mspec.acceleration.x = stick_vector.x * horizontal_acceleration;
-  if (was_pressed(input->gamepad.a)
+
+  if (was_pressed(input->gamepad.a)) {
+    game->jump_input_timer = 0.2f;
+  }
+
+  if (game->jump_input_timer > 0.0f
       && (game->character.collision_state & COLLISION_STATE_BOTTOM)) {
     mspec.acceleration.y = 7.0e2f;
+    game->jump_input_timer = 0.0f;
   }
   float side_accelaration_on_wall_jump = 300.0f;
   float upward_accelaration_on_wall_jump = 600.0f;
-  if (was_pressed(input->gamepad.a)
+  if (game->jump_input_timer > 0.0f
       && ((game->character.collision_state & COLLISION_STATE_BOTTOM) == 0)
       && (game->character.collision_state & COLLISION_STATE_LEFT)) {
     mspec.acceleration.y = upward_accelaration_on_wall_jump;
     mspec.acceleration.x = side_accelaration_on_wall_jump;
     game->character.speed.y = 0.0f;
+    game->jump_input_timer = 0.0f;
   }
-  if (was_pressed(input->gamepad.a)
+  if (game->jump_input_timer > 0.0f
       && ((game->character.collision_state & COLLISION_STATE_BOTTOM) == 0)
       && (game->character.collision_state & COLLISION_STATE_RIGHT)) {
     mspec.acceleration.y = upward_accelaration_on_wall_jump;
     mspec.acceleration.x = -side_accelaration_on_wall_jump;
     game->character.speed.y = 0.0f;
+    game->jump_input_timer = 0.0f;
+  }
+  if (game->jump_input_timer > 0.0f) {
+    game->jump_input_timer -= input->seconds_elapsed;
   }
 
 
