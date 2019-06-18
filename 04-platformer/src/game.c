@@ -145,15 +145,9 @@ static vector2_t translate_point_coords(game_t *game, drawing_buffer_t *buffer, 
   return result;
 }
 
-static void game_render(game_t *game, drawing_buffer_t *buffer) {
-  // NOTE: most time we spend here currently
-  memset(buffer->buffer, 0, buffer->width * buffer->height * sizeof(*buffer->buffer));
-
+static void game_draw_character(game_t *game, drawing_buffer_t *buffer,
+                                vector2_t offset_pixels) {
   rectangle_t char_rect = translate_coords(game, buffer, &game->character);
-  vector2_t camera_coords = translate_point_coords(game, buffer, game->camera.current_position);
-
-  vector2_t offset_pixels = V2(-camera_coords.x + buffer->width * 0.5f, 0.0f);
-
   uint32_t mc_color = RGBA(255, 0, 0, 255);
   if (game->character.collision_state & COLLISION_STATE_LEFT ||
       game->character.collision_state & COLLISION_STATE_RIGHT) {
@@ -162,12 +156,44 @@ static void game_render(game_t *game, drawing_buffer_t *buffer) {
   if (game->character.collision_state & COLLISION_STATE_BOTTOM) {
     mc_color |= RGBA(0, 0, 255, 255);
   }
-
+/*
   draw_rectangle(buffer,
                  char_rect.top_left.x + offset_pixels.x, char_rect.top_left.y + offset_pixels.y,
                  char_rect.size.x, char_rect.size.y,
                  mc_color
                 );
+                */
+  imagebuffer_t *sprite = &game->character_sprite_right;
+  if ((game->character.collision_state & COLLISION_STATE_BOTTOM) == 0) {
+    if (game->last_x_movement_direction >= 0.0f) {
+      sprite = &game->character_sprite_jump_right;
+    } else {
+      sprite = &game->character_sprite_jump_left;
+    }
+  }  else {
+    if (game->last_x_movement_direction >= 0.0f) {
+      sprite = &game->character_sprite_right;
+    } else {
+      sprite = &game->character_sprite_left;
+    }
+  }
+  draw_bitmap(buffer,
+              *sprite,
+              char_rect.top_left.x + offset_pixels.x,
+              char_rect.top_left.y + offset_pixels.y
+             );
+}
+
+static void game_render(game_t *game, drawing_buffer_t *buffer) {
+  // NOTE: most time we spend here currently
+  memset(buffer->buffer, 255, buffer->width * buffer->height * sizeof(*buffer->buffer));
+
+  vector2_t camera_coords = translate_point_coords(game, buffer, game->camera.current_position);
+
+  vector2_t offset_pixels = V2(-camera_coords.x + buffer->width * 0.5f, 0.0f);
+
+  game_draw_character(game, buffer, offset_pixels);
+
   for (uint32_t i = 0; i < game->entities_count; ++i) {
     entity_t *e = game->entities + i;
     switch (e->type) {
@@ -252,6 +278,7 @@ void game_init(game_t *game) {
   game->entities_count = 0;
   game->character.pos = (vector2_t){5.0f, 3.525f};
   game->character.size = (vector2_t){1.0f, 1.0f};
+  game->last_x_movement_direction = 1.0f;
 
   game_push_wall_by_top_left(game, 0.0f, 3.0f, 60.0f, 3.0f);
 
@@ -267,6 +294,24 @@ void game_init(game_t *game) {
   game_push_wall_by_top_left(game, 49.0f, 18.0f, 1.0f, 15.0f);
 
   camera_init(game);
+
+  buffer_t character_bmp = platform_load_file("../assets/character.bmp");
+  game->character_sprite_right = game_decode_bmp(character_bmp);
+
+  buffer_t character_left_bmp
+    = platform_load_file("../assets/character_left.bmp");
+  game->character_sprite_left
+    = game_decode_bmp(character_left_bmp);
+
+  buffer_t character_jump_right_bmp
+    = platform_load_file("../assets/character_jump_right.bmp");
+  game->character_sprite_jump_right
+    = game_decode_bmp(character_jump_right_bmp);
+
+  buffer_t character_jump_left_bmp
+    = platform_load_file("../assets/character_jump_left.bmp");
+  game->character_sprite_jump_left
+    = game_decode_bmp(character_jump_left_bmp);
 }
 
 gamepad_input_t old = {};
@@ -385,7 +430,7 @@ get_collision_time(entity_t *stationary, entity_t *moving,
   vector2_t stationary_center = stationary->pos; // X
 
   vector2_t stat_box = VECTOR2_ADD(stationary->size, moving->size);
-  stat_box = VECTOR2_ADD(stat_box, V2(-0.01f, -0.01f));
+  //stat_box = VECTOR2_ADD(stat_box, V2(-0.01f, -0.01f));
 
   vector2_t half_size = VECTOR2_MULT_NUMBER(stat_box, 0.5f);
   /*
@@ -666,6 +711,11 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
         }
       }
     }
+  }
+  if (game->character.speed.x > 0.1f) {
+    game->last_x_movement_direction = 1.0f;
+  } else if (game->character.speed.x < -0.1f) {
+    game->last_x_movement_direction = -1.0f;
   }
 
   game->gamepad_visualize_data = input->gamepad;

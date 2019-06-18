@@ -131,6 +131,12 @@ typedef struct {
   uint32_t entities_count;
   float pixels_per_meter;
   float jump_input_timer;
+  float last_x_movement_direction;
+
+  imagebuffer_t character_sprite_right;
+  imagebuffer_t character_sprite_left;
+  imagebuffer_t character_sprite_jump_right;
+  imagebuffer_t character_sprite_jump_left;
 } game_t;
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer);
