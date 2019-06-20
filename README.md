@@ -96,3 +96,55 @@ and state is restored at the beginning of every loop. F4 to exit loop and get co
 
 ![Record-replay demo](gifs/record-replay-loop.gif)
 
+## 04 - Platformer
+
+I wanted next demo to be more dynamic and fun so I decided to make a platformer.
+Gamepad support was desired also. It fits particularly well together.
+
+Technical improvements:
+
+1. Gamepad support in Linux using **evdev** interface (documentation can be found here [https://www.kernel.org/doc/html/latest/input/input.html]()).
+1. Movement with collision detection using rays, segments and primitive subset of Minkowski algebra.
+So instead of Yes/No answer for new position I get exactly how much I can move
+with such speed and direction.
+1. Gliding along edges of collided objects.
+1. Physics of movement and jumps.
+1. Camera movement code for pleasurable look and feel.
+Y coordinate is fixed but X coordinate is adjusted using LERP
+according to character movement.
+1. Inspection of collision with ground and walls for game logic.
+So you can't jump while in the air and if character is touching a wall then walljump
+(sideways and up) is performed instead of regular jump.
+1. Jump button buffering, so player can press jump button a little early and still
+get desired jump. It was very unnatural and annoying without it.
+1. Gamepad subset visualization
+
+I don't know why but I was very proud of myself after gamepad code was implemented.
+In the end it was not very
+hard to implement. I believe most challenging part was to find documentation
+for **evdev** interface.
+Google search was filled with irrelevant information because name **evdev** collides with more popular existing python module.
+I am grateful for open source tool **evtest**
+which I was using for visualization and as (source code) cheatsheet to understand
+how interface and device properties work.
+
+Collision detection of two AABB rectangles was transformed into collision
+of a rectangle and a point using size transformation.
+I've implemented intersection of line segment and ray without assumption of alignment
+to axis in hope to reuse it in future.
+
+Jump physics constants were found empirically (live code reloading was very useful here).
+It was too late when I found
+that it was better to calculate them in accordance with desired time
+and height of jump.
+
+Few notes:
+
+1. I've spent much time debugging coordinate system misallignment in rendering and
+collision detection.
+1. It becomes annoying to be unable to scale sprite while rendering scene.
+I should implement some improvements to software rendering routines
+in next demo.
+
+![Platformer-demo](gifs/platformer-with-sprites.gif)
+
