@@ -163,7 +163,7 @@ static void game_draw_character(game_t *game, drawing_buffer_t *buffer,
                  mc_color
                 );
                 */
-  imagebuffer_t *sprite = &game->character_sprite_right;
+  sprite_t *sprite = &game->character_sprite_right;
   if ((game->character.collision_state & COLLISION_STATE_BOTTOM) == 0) {
     if (game->last_x_movement_direction >= 0.0f) {
       sprite = &game->character_sprite_jump_right;
@@ -178,9 +178,9 @@ static void game_draw_character(game_t *game, drawing_buffer_t *buffer,
     }
   }
   draw_bitmap(buffer,
-              *sprite,
-              char_rect.top_left.x + offset_pixels.x,
-              char_rect.top_left.y + offset_pixels.y
+              sprite->image,
+              char_rect.top_left.x + offset_pixels.x + sprite->offset.x,
+              char_rect.top_left.y + offset_pixels.y + sprite->offset.y
              );
 }
 
@@ -276,8 +276,8 @@ void game_init(game_t *game) {
   game->character.accel = (vector2_t){0.0f, 0.0f};
   game->pixels_per_meter = 50.0f;
   game->entities_count = 0;
-  game->character.pos = (vector2_t){5.0f, 3.525f};
-  game->character.size = (vector2_t){1.0f, 1.0f};
+  game->character.pos = (vector2_t){5.0f, 4.525f};
+  game->character.size = (vector2_t){0.48f, 1.28f};
   game->last_x_movement_direction = 1.0f;
 
   game_push_wall_by_top_left(game, 0.0f, 3.0f, 60.0f, 3.0f);
@@ -295,23 +295,26 @@ void game_init(game_t *game) {
 
   camera_init(game);
 
-  buffer_t character_bmp = platform_load_file("../assets/character.bmp");
-  game->character_sprite_right = game_decode_bmp(character_bmp);
+  buffer_t character_bmp = platform_load_file("../assets/character2_im.bmp");
+  game->character_sprite_right.image = game_decode_bmp(character_bmp);
+  game->character_sprite_right.offset.x = -12;
+  game->character_sprite_right.offset.y = 4;
 
-  buffer_t character_left_bmp
-    = platform_load_file("../assets/character_left.bmp");
-  game->character_sprite_left
-    = game_decode_bmp(character_left_bmp);
+  character_bmp = platform_load_file("../assets/character2_im_left.bmp");
+  game->character_sprite_left.image = game_decode_bmp(character_bmp);
+  game->character_sprite_left.offset.x = -12;
+  game->character_sprite_left.offset.y = 4;
 
-  buffer_t character_jump_right_bmp
-    = platform_load_file("../assets/character_jump_right.bmp");
-  game->character_sprite_jump_right
-    = game_decode_bmp(character_jump_right_bmp);
+  character_bmp = platform_load_file("../assets/character2_jump_im.bmp");
+  game->character_sprite_jump_right.image = game_decode_bmp(character_bmp);
+  game->character_sprite_jump_right.offset.x = -12;
+  game->character_sprite_jump_right.offset.y = 4;
 
-  buffer_t character_jump_left_bmp
-    = platform_load_file("../assets/character_jump_left.bmp");
-  game->character_sprite_jump_left
-    = game_decode_bmp(character_jump_left_bmp);
+  character_bmp = platform_load_file("../assets/character2_jump_im_left.bmp");
+  game->character_sprite_jump_left.image = game_decode_bmp(character_bmp);
+  game->character_sprite_jump_left.offset.x = -12;
+  game->character_sprite_jump_left.offset.y = 4;
+
 }
 
 gamepad_input_t old = {};
@@ -645,7 +648,7 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   }
   mspec.acceleration.x = stick_vector.x * horizontal_acceleration;
 
-  if (was_pressed(input->gamepad.a)) {
+  if (was_pressed(input->gamepad.a) || input->up.pressed) {
     game->jump_input_timer = 0.2f;
   }
 

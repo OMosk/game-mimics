@@ -122,6 +122,11 @@ typedef struct {
 } camera_t;
 
 typedef struct {
+  imagebuffer_t image;
+  ivector2_t offset;
+} sprite_t;
+
+typedef struct {
   bool is_inited;
   bool over;
   gamepad_input_t gamepad_visualize_data;
@@ -133,10 +138,10 @@ typedef struct {
   float jump_input_timer;
   float last_x_movement_direction;
 
-  imagebuffer_t character_sprite_right;
-  imagebuffer_t character_sprite_left;
-  imagebuffer_t character_sprite_jump_right;
-  imagebuffer_t character_sprite_jump_left;
+  sprite_t character_sprite_right;
+  sprite_t character_sprite_left;
+  sprite_t character_sprite_jump_right;
+  sprite_t character_sprite_jump_left;
 } game_t;
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer);
