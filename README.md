@@ -13,10 +13,10 @@ so other platforms should be possible to implement without much pain (probably).
 
 Content:
 
-1. [01 - Snake](#anchor_01)
-1. [02 - Arkanoid](#anchor_02)
-1. [03 - Pacman-like](#anchor_03)
-1. [04 - Platformer](#anchor_04)
+- [01 - Snake](#anchor_01)
+- [02 - Arkanoid](#anchor_02)
+- [03 - Pacman-like](#anchor_03)
+- [04 - Platformer](#anchor_04)
 
 ## <a name="anchor_01"></a>01 - Snake
 
