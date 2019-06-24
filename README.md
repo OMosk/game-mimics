@@ -11,7 +11,14 @@ Demos are developed for Linux/X11 machine.
 I've tried to separate platform layer from game code
 so other platforms should be possible to implement without much pain (probably).
 
-## 01 - Snake
+Content:
+
+1. [01 - Snake](#anchor_01)
+1. [02 - Arkanoid](#anchor_02)
+1. [03 - Pacman-like](#anchor_03)
+1. [04 - Platformer](#anchor_04)
+
+## <a name="anchor_01"></a>01 - Snake
 
 I needed to start with something so I've chosen snake.
 I needed to accomplish few techinal achievements to make a demo:
@@ -43,7 +50,7 @@ After demo was doing reasonably well I decided to stop and keep it simple for no
 ![Snake demo](./gifs/snake.gif)
 
 
-## 02 - Arkanoid
+## <a name="anchor_02"></a>02 - Arkanoid
 
 I wanted second demo to be 60fps smooth but still trivial so I decided to make an arkanoid.
 I still needed to rewrite platform code from C++ to C. I thought I knew what was C++ and what was compatible with C in my code and I was wrong :).
@@ -63,7 +70,7 @@ Few notes on things that 100% needed improvement:
 ![Arkanoid demo](gifs/arkanoid.gif)
 
 
-## 03 - Pacman-like
+## <a name="anchor_03"></a>03 - Pacman-like
 
 The main goal for next demo was loading and software rendering of bmp sprites
 with support of alpha channel.
@@ -96,7 +103,7 @@ and state is restored at the beginning of every loop. F4 to exit loop and get co
 
 ![Record-replay demo](gifs/record-replay-loop.gif)
 
-## 04 - Platformer
+## <a name="anchor_04"></a>04 - Platformer
 
 I wanted next demo to be more dynamic and fun so I decided to make a platformer.
 Gamepad support was desired also. It fits particularly well together.
