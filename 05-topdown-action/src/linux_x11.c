@@ -100,50 +100,187 @@ typedef struct {
 static void X11EventLoop(input_t *input, debug_input_t *debug_input) {
   XEvent event;
 
+  input->mouse.left.transitions = 0;
+  input->mouse.middle.transitions = 0;
+  input->mouse.right.transitions = 0;
+
+  input->keyboard.left.transitions = 0;
+  input->keyboard.right.transitions = 0;
+  input->keyboard.up.transitions = 0;
+  input->keyboard.down.transitions = 0;
+
+  input->keyboard.w.transitions = 0;
+  input->keyboard.a.transitions = 0;
+  input->keyboard.s.transitions = 0;
+  input->keyboard.d.transitions = 0;
+
+  input->keyboard.space.transitions = 0;
+  input->keyboard.esc.transitions = 0;
+  input->keyboard.enter.transitions = 0;
+
   int eventsUnprocessed = XPending(display);
   while (eventsUnprocessed--) {
     XNextEvent(display, &event);
-    if (event.type == KeyPress) {
+    switch (event.type) {
+    case KeyPress: {
       KeySym key = XLookupKeysym(&event.xkey, 0);
-      if (key == XK_Left) {
-        input->left.pressed = true;
-      } else if (key == XK_Right) {
-        input->right.pressed = true;
-      } else if (key == XK_Up) {
-        input->up.pressed = true;
-      } else if (key == XK_Down) {
-        input->down.pressed = true;
-      } else if (key == XK_p) {
+      switch (key) {
+      case XK_Left: {
+        input->keyboard.left.pressed = true;
+        input->keyboard.left.transitions++;
+      } break;
+      case XK_Right: {
+        input->keyboard.right.pressed = true;
+        input->keyboard.right.transitions++;
+      } break;
+      case XK_Up: {
+        input->keyboard.up.pressed = true;
+        input->keyboard.up.transitions++;
+      } break;
+      case XK_Down: {
+        input->keyboard.down.pressed = true;
+        input->keyboard.down.transitions++;
+      } break;
+      case XK_w: {
+        input->keyboard.w.pressed = true;
+        input->keyboard.w.transitions++;
+      } break;
+      case XK_a: {
+        input->keyboard.a.pressed = true;
+        input->keyboard.a.transitions++;
+      } break;
+      case XK_s: {
+        input->keyboard.s.pressed = true;
+        input->keyboard.s.transitions++;
+      } break;
+      case XK_d: {
+        input->keyboard.d.pressed = true;
+        input->keyboard.d.transitions++;
+      } break;
+      case XK_space: {
+        input->keyboard.space.pressed = true;
+        input->keyboard.space.transitions++;
+      } break;
+      case XK_Escape: {
+        input->keyboard.esc.pressed = true;
+        input->keyboard.esc.transitions++;
+      } break;
+      case XK_Return: {
+        input->keyboard.enter.pressed = true;
+        input->keyboard.enter.transitions++;
+      } break;
+      case XK_p: {
         input->pause = !input->pause;
         printf("Pause is now %i \n", input->pause);
+      } break;
+
+      default: {
       }
-    } else if (event.type == KeyRelease) {
+      }
+    } break;
+    case KeyRelease: {
       KeySym key = XLookupKeysym(&event.xkey, 0);
-      if (key == XK_Left) {
-        input->left.pressed = false;
-      } else if (key == XK_Right) {
-        input->right.pressed = false;
-      } else if (key == XK_Up) {
-        input->up.pressed = false;
-      } else if (key == XK_Down) {
-        input->down.pressed = false;
-      } else if (key == XK_F2) {
-        debug_input->start_recording = true;
-      } else if (key == XK_F3) {
-        debug_input->stop_recording = true;
-      } else if (key == XK_F4) {
-        debug_input->stop_playing = true;
-      } else if (key == XK_Escape) {
-        input->restart = true;
+      switch (key) {
+      case XK_Left: {
+        input->keyboard.left.pressed = false;
+        input->keyboard.left.transitions++;
+      } break;
+      case XK_Right: {
+        input->keyboard.right.pressed = false;
+        input->keyboard.right.transitions++;
+      } break;
+      case XK_Up: {
+        input->keyboard.up.pressed = false;
+        input->keyboard.up.transitions++;
+      } break;
+      case XK_Down: {
+        input->keyboard.down.pressed = false;
+        input->keyboard.down.transitions++;
+      } break;
+      case XK_w: {
+        input->keyboard.w.pressed = false;
+        input->keyboard.w.transitions++;
+      } break;
+      case XK_a: {
+        input->keyboard.a.pressed = false;
+        input->keyboard.a.transitions++;
+      } break;
+      case XK_s: {
+        input->keyboard.s.pressed = false;
+        input->keyboard.s.transitions++;
+      } break;
+      case XK_d: {
+        input->keyboard.d.pressed = false;
+        input->keyboard.d.transitions++;
+      } break;
+      case XK_space: {
+        input->keyboard.space.pressed = false;
+        input->keyboard.space.transitions++;
+      } break;
+      case XK_Escape: {
+        input->keyboard.esc.pressed = false;
+        input->keyboard.esc.transitions++;
+      } break;
+      case XK_Return: {
+        input->keyboard.enter.pressed = false;
+        input->keyboard.enter.transitions++;
+      } break;
+      default: {
       }
-    } else if (event.type==ResizeRequest) {
+      }
+    } break;
+    case ResizeRequest: {
       window_width = event.xresizerequest.width;
       window_width = event.xresizerequest.height;
-    } else if (event.type == ClientMessage) {
+    } break;
+    case ClientMessage: {
       if ((Atom)event.xclient.data.l[0] == wmDeleteWindow) {
         should_continue = false;
         break;
       }
+    } break;
+    case ButtonPress: {
+      switch (event.xbutton.button) {
+      case Button1: {
+        input->mouse.left.pressed = true;
+        input->mouse.left.transitions++;
+      } break;
+      case Button2: {
+        input->mouse.middle.pressed = true;
+        input->mouse.middle.transitions++;
+      } break;
+      case Button3: {
+        input->mouse.right.pressed = true;
+        input->mouse.right.transitions++;
+      } break;
+      default: {
+      }
+      }
+    } break;
+    case ButtonRelease: {
+      switch (event.xbutton.button) {
+      case Button1: {
+        input->mouse.left.pressed = false;
+        input->mouse.left.transitions++;
+      } break;
+      case Button2: {
+        input->mouse.middle.pressed = false;
+        input->mouse.middle.transitions++;
+      } break;
+      case Button3: {
+        input->mouse.right.pressed = false;
+        input->mouse.right.transitions++;
+      } break;
+      default: {
+      }
+      }
+    } break;
+    case MotionNotify: {
+      input->mouse.x = event.xmotion.x;
+      input->mouse.y = event.xmotion.y;
+    } break;
+    default: {
+    }
     }
   }
 }
@@ -564,7 +701,7 @@ int main(int argc, char **argv, char **envp) {
   XSetWMProtocols(display, window, &wmDeleteWindow, 1);
 
   long event_mask = ResizeRedirectMask | StructureNotifyMask | KeyPressMask
-    | KeyReleaseMask;
+    | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask;
   XSelectInput(display, window, event_mask);
   XMapWindow(display, window);
 

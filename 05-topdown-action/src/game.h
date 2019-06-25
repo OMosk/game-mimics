@@ -65,14 +65,22 @@ typedef struct {
 
 typedef struct {
   button_t left, middle, right;
+  int x, y;
 } mouse_input_t;
 
 typedef struct {
   button_t left, right, up, down;
+  button_t w, a, s, d;
+  button_t space, esc, enter;
+} keyboard_input_t;
+
+typedef struct {
   float seconds_elapsed;
   bool pause;
   bool restart;
   gamepad_input_t gamepad;
+  mouse_input_t mouse;
+  keyboard_input_t keyboard;
 } input_t;
 
 typedef struct {
