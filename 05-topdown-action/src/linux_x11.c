@@ -752,6 +752,34 @@ int main(int argc, char **argv, char **envp) {
   }
 
   input_t input = {};
+  {
+    Window tmp;
+    int tmpi;
+    uint tmpu;
+    //broken, returned coordinates are for root window probably
+    XQueryPointer(display, rootWindow,
+                      &tmp, &tmp,
+                      &tmpi, &tmpi,
+                      &input.mouse.x, &input.mouse.y,
+                      &tmpu);
+
+    Pixmap bm_no;
+    Colormap cmap;
+    Cursor no_ptr;
+    XColor black, dummy;
+    static char bm_no_data[] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+    cmap = DefaultColormap(display, DefaultScreen(display));
+    XAllocNamedColor(display, cmap, "black", &black, &dummy);
+    bm_no = XCreateBitmapFromData(display, window, bm_no_data, 8, 8);
+    no_ptr = XCreatePixmapCursor(display, bm_no, bm_no, &black, &black, 0, 0);
+
+    XDefineCursor(display, window, no_ptr);
+    XFreeCursor(display, no_ptr);
+    if (bm_no != None)
+      XFreePixmap(display, bm_no);
+    XFreeColors(display, cmap, &black.pixel, 1, 0);
+  }
   struct timespec sleep_interval;
   sleep_interval.tv_sec = 0;
   sleep_interval.tv_nsec = 0;

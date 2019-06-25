@@ -130,9 +130,10 @@ static vector2_t translate_point_coords(game_t *game, drawing_buffer_t *buffer, 
   return result;
 }
 
-static void game_render(game_t *game, drawing_buffer_t *buffer) {
+static void game_render(game_t *game, input_t *input, drawing_buffer_t *buffer) {
   // NOTE: most time we spend here currently
   memset(buffer->buffer, 255, buffer->width * buffer->height * sizeof(*buffer->buffer));
+  draw_rectangle(buffer, input->mouse.x, input->mouse.y, 10, 10, RGB(0, 0, 0));
 }
 
 static int
@@ -438,7 +439,7 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
       return;
     }
   }
-  game_render(game, buffer);
+  game_render(game, input, buffer);
 }
 
 static uint32_t game_read_16bytes(uint8_t *buffer) {
