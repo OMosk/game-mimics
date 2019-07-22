@@ -40,6 +40,7 @@ typedef struct {
 } ivector2_t;
 
 #define V2(x, y) ((vector2_t){(x), (y)})
+#define IV2(x, y) ((ivector2_t){(x), (y)})
 #define VECTOR2_ADD(a, b) ((vector2_t){(a).x + (b).x, (a).y + (b).y})
 #define VECTOR2_SUB(a, b) ((vector2_t){(a).x - (b).x, (a).y - (b).y})
 #define VECTOR2_MULT_NUMBER(a, b) ((vector2_t){(a).x * (b), (a).y * (b)})
@@ -137,6 +138,9 @@ typedef struct {
   float pixels_per_meter;
   entity_t entities[256];
   uint32_t entities_count;
+
+  imagebuffer_t triangle;
+  float rotation;
 
 } game_t;
 

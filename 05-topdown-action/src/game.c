@@ -86,6 +86,99 @@ static void draw_bitmap(drawing_buffer_t *buffer, imagebuffer_t bitmap, int x, i
       *bg_pixel = new_pixel;
     }
   }
+}
+
+static vector2_t rotate_point(vector2_t p, float s, float c) {
+  return V2(c * p.x - s * p.y,
+            s * p.x + c * p.y);
+}
+
+static void draw_bitmap2(drawing_buffer_t *buffer,
+                         imagebuffer_t bitmap,
+                         ivector2_t coords,
+                         ivector2_t sprite_center,
+                         float scale,
+                         float rotate) {
+
+  float s = sinf(rotate);
+  float c = cosf(rotate);
+  float s_inv = sinf(-rotate);
+  float c_inv = cosf(-rotate);
+
+
+  vector2_t top_left
+    = V2(floorf(- sprite_center.x * scale),
+         floorf(- sprite_center.y * scale));
+
+  vector2_t top_right
+    = V2(ceilf(+ (- sprite_center.x + bitmap.w) * scale),
+         floorf(- sprite_center.y * scale));
+
+
+  vector2_t bottom_right
+    = V2(ceilf(+ (- sprite_center.x + bitmap.w) * scale),
+         ceilf(+ (- sprite_center.y + bitmap.h) * scale));
+
+  vector2_t bottom_left
+    = V2(floorf(- sprite_center.x * scale),
+         ceilf(+ (- sprite_center.y + bitmap.h) * scale));
+
+  vector2_t top_left_n = rotate_point(top_left, s, c);
+  vector2_t top_right_n = rotate_point(top_right, s, c);
+  vector2_t bottom_left_n = rotate_point(bottom_left, s, c);
+  vector2_t bottom_right_n = rotate_point(bottom_right, s, c);
+
+  int x_min = MIN(top_left_n.x, top_right_n.x);
+  x_min = MIN(x_min, bottom_left_n.x);
+  x_min = MIN(x_min, bottom_right_n.x);
+
+  int y_min = MIN(top_left_n.y, top_right_n.y);
+  y_min = MIN(y_min, bottom_left_n.y);
+  y_min = MIN(y_min, bottom_right_n.y);
+
+  int x_max = MAX(top_left_n.x, top_right_n.x);
+  x_max = MAX(x_max, bottom_left_n.x);
+  x_max = MAX(x_max, bottom_right_n.x);
+
+  int y_max = MAX(top_left_n.y, top_right_n.y);
+  y_max = MAX(y_max, bottom_left_n.y);
+  y_max = MAX(y_max, bottom_right_n.y);
+
+  x_min = MAX(0, x_min + coords.x);
+  y_min = MAX(0, y_min + coords.y);
+  x_max = MIN((int)buffer->width, x_max + coords.x);
+  y_max = MIN((int)buffer->height, y_max + coords.y);
+
+
+  for (int it_y = y_min; it_y < y_max; ++it_y) {
+    for (int it_x = x_min; it_x < x_max; ++it_x) {
+      vector2_t p4 = V2(it_x, it_y);
+      vector2_t p3 = VECTOR2_SUB(p4, coords);
+      vector2_t p2 = rotate_point(p3, s_inv, c_inv);
+      vector2_t p1 = VECTOR2_MULT_NUMBER(p2, 1.f/scale);
+      vector2_t p0 = VECTOR2_ADD(p1, sprite_center);
+      int origin_xi = roundf(p0.x);
+      int origin_yi = roundf(p0.y);
+
+      if (origin_xi < 0 || origin_xi >= bitmap.w) {
+        continue;
+      }
+      if (origin_yi < 0 || origin_yi >= bitmap.h) {
+        continue;
+      }
+
+
+      rgba_t *bg_pixel = (rgba_t *)buffer->buffer + it_y * buffer->width + it_x;
+      rgba_t *fg_pixel = (rgba_t *)bitmap.data + origin_yi * bitmap.w + origin_xi;
+      rgba_t new_pixel = {0};
+      new_pixel.r = bg_pixel->r + (fg_pixel->r - bg_pixel->r) * (fg_pixel->a / 255.0f);
+      new_pixel.g = bg_pixel->g + (fg_pixel->g - bg_pixel->g) * (fg_pixel->a / 255.0f);
+      new_pixel.b = bg_pixel->b + (fg_pixel->b - bg_pixel->b) * (fg_pixel->a / 255.0f);
+      *bg_pixel = new_pixel;
+    }
+  }
+
+
 
 }
 
@@ -134,6 +227,11 @@ static void game_render(game_t *game, input_t *input, drawing_buffer_t *buffer) 
   // NOTE: most time we spend here currently
   memset(buffer->buffer, 255, buffer->width * buffer->height * sizeof(*buffer->buffer));
   draw_rectangle(buffer, input->mouse.x, input->mouse.y, 10, 10, RGB(0, 0, 0));
+  draw_bitmap2(buffer, game->triangle,
+               IV2(input->mouse.x, input->mouse.y),
+               IV2(64, 64),
+               1.0f + 0.5 * sinf(game->rotation),
+               game->rotation);
 }
 
 static int
@@ -156,6 +254,9 @@ static float lerp(float a, float b, float t) {
 
 void game_init(game_t *game) {
   game->is_inited = true;
+
+  buffer_t triangle_file = platform_load_file("../assets/triangle.bmp");
+  game->triangle = game_decode_bmp(triangle_file);
 }
 
 gamepad_input_t old = {};
@@ -439,6 +540,9 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
       return;
     }
   }
+
+  game->rotation += input->seconds_elapsed;
+
   game_render(game, input, buffer);
 }
 

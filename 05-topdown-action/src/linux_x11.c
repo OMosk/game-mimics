@@ -763,22 +763,22 @@ int main(int argc, char **argv, char **envp) {
                       &input.mouse.x, &input.mouse.y,
                       &tmpu);
 
-    Pixmap bm_no;
-    Colormap cmap;
-    Cursor no_ptr;
-    XColor black, dummy;
-    static char bm_no_data[] = {0, 0, 0, 0, 0, 0, 0, 0};
-
-    cmap = DefaultColormap(display, DefaultScreen(display));
-    XAllocNamedColor(display, cmap, "black", &black, &dummy);
-    bm_no = XCreateBitmapFromData(display, window, bm_no_data, 8, 8);
-    no_ptr = XCreatePixmapCursor(display, bm_no, bm_no, &black, &black, 0, 0);
-
-    XDefineCursor(display, window, no_ptr);
-    XFreeCursor(display, no_ptr);
-    if (bm_no != None)
-      XFreePixmap(display, bm_no);
-    XFreeColors(display, cmap, &black.pixel, 1, 0);
+//    Pixmap bm_no;
+//    Colormap cmap;
+//    Cursor no_ptr;
+//    XColor black, dummy;
+//    static char bm_no_data[] = {0, 0, 0, 0, 0, 0, 0, 0};
+//
+//    cmap = DefaultColormap(display, DefaultScreen(display));
+//    XAllocNamedColor(display, cmap, "black", &black, &dummy);
+//    bm_no = XCreateBitmapFromData(display, window, bm_no_data, 8, 8);
+//    no_ptr = XCreatePixmapCursor(display, bm_no, bm_no, &black, &black, 0, 0);
+//
+//    XDefineCursor(display, window, no_ptr);
+//    XFreeCursor(display, no_ptr);
+//    if (bm_no != None)
+//      XFreePixmap(display, bm_no);
+//    XFreeColors(display, cmap, &black.pixel, 1, 0);
   }
   struct timespec sleep_interval;
   sleep_interval.tv_sec = 0;
