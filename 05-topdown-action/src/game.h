@@ -136,8 +136,10 @@ typedef struct {
   bool is_inited;
   bool over;
   float pixels_per_meter;
+  entity_t triangle_entity;
   entity_t entities[256];
   uint32_t entities_count;
+  vector2_t cursor_double;
 
   imagebuffer_t triangle;
   float rotation;

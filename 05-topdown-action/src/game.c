@@ -21,6 +21,8 @@
 #define kColorGreen  RGB(0, 255, 0)
 #define kColorCyan  RGB(0, 255, 255)
 
+#define M_PI 3.1415926
+
 static float game_sqr(float x) {
   return x*x;
 }
@@ -99,11 +101,10 @@ static void draw_bitmap2(drawing_buffer_t *buffer,
                          ivector2_t sprite_center,
                          float scale,
                          float rotate) {
-
-  float s = sinf(rotate);
-  float c = cosf(rotate);
-  float s_inv = sinf(-rotate);
-  float c_inv = cosf(-rotate);
+  float s = sinf(-rotate);
+  float c = cosf(-rotate);
+  float s_inv = sinf(rotate);
+  float c_inv = cosf(rotate);
 
 
   vector2_t top_left
@@ -223,14 +224,40 @@ static vector2_t translate_point_coords(game_t *game, drawing_buffer_t *buffer, 
   return result;
 }
 
+static vector2_t
+translate_screen_coords_to_physics_coords(
+  game_t *game, drawing_buffer_t *buffer, vector2_t point) {
+
+  vector2_t result = {};
+  float buffer_h = buffer->height;
+  float pixels_per_meter = game->pixels_per_meter;
+
+  result.x = point.x / pixels_per_meter;
+  result.y = (buffer_h - point.y) / pixels_per_meter;
+
+  return result;
+}
+
 static void game_render(game_t *game, input_t *input, drawing_buffer_t *buffer) {
   // NOTE: most time we spend here currently
   memset(buffer->buffer, 255, buffer->width * buffer->height * sizeof(*buffer->buffer));
+
+  vector2_t screen_coords = translate_point_coords(game, buffer, game->triangle_entity.pos);
+  ivector2_t screen_coords_i = IV2(screen_coords.x, screen_coords.y);
+
   draw_rectangle(buffer, input->mouse.x, input->mouse.y, 10, 10, RGB(0, 0, 0));
+/*
+  {
+    vector2_t pos
+      = translate_point_coords(game, buffer, game->cursor_double);
+    draw_rectangle(buffer, pos.x, pos.y, 10, 10, RGB(0, 0, 0));
+  }
+  */
+
   draw_bitmap2(buffer, game->triangle,
-               IV2(input->mouse.x, input->mouse.y),
+               screen_coords_i,//IV2(input->mouse.x, input->mouse.y),
                IV2(64, 64),
-               1.0f + 0.5 * sinf(game->rotation),
+               1.0f,
                game->rotation);
 }
 
@@ -257,6 +284,9 @@ void game_init(game_t *game) {
 
   buffer_t triangle_file = platform_load_file("../assets/triangle.bmp");
   game->triangle = game_decode_bmp(triangle_file);
+
+  game->pixels_per_meter = 100;
+  game->triangle_entity.pos = V2(5, 5);
 }
 
 gamepad_input_t old = {};
@@ -484,19 +514,15 @@ is_colliding(entity_t *stationary, entity_t *moving, float epsilon,
 
 typedef struct {
   vector2_t acceleration;
-  vector2_t gravity;
   vector2_t drag;
   vector2_t max_speed;
 } movement_spec_t;
 
 static void move_entity(game_t *game, entity_t *c, movement_spec_t *spec, float dt) {
-  c->accel = VECTOR2_ADD(spec->acceleration, spec->gravity);
+  c->accel = spec->acceleration;
   c->speed = VECTOR2_ADD(c->speed, VECTOR2_MULT_NUMBER(c->accel, dt));
   vector2_t drag = V2(c->speed.x * spec->drag.x * dt, c->speed.y * spec->drag.y * dt);
   c->speed = VECTOR2_ADD(c->speed, drag);
-  if (fabsf(c->speed.x) > spec->max_speed.x) {
-    c->speed.x = spec->max_speed.x * (spec->max_speed.x / c->speed.x);
-  }
 
   for (int i = 0; i < 4 && dt > 1e-8f; ++i) {
     float actual_dt = dt;
@@ -541,7 +567,38 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
     }
   }
 
-  game->rotation += input->seconds_elapsed;
+  vector2_t cursor_screen_coords = V2(input->mouse.x, input->mouse.y);
+  vector2_t cursor_physics_coords
+    = translate_screen_coords_to_physics_coords(game, buffer, cursor_screen_coords);
+  vector2_t looking_direction = VECTOR2_SUB(cursor_physics_coords, game->triangle_entity.pos);
+
+  float angle_radians = atan2f(looking_direction.y, looking_direction.x);
+  game->rotation = angle_radians - M_PI/2.0f;
+
+  vector2_t direction = {0};
+  if ((input->keyboard.a.pressed)) {
+    direction = VECTOR2_ADD(direction, V2(-1, 0));
+  }
+  if ((input->keyboard.d.pressed)) {
+    direction = VECTOR2_ADD(direction, V2(1, 0));
+  }
+  if ((input->keyboard.w.pressed)) {
+    direction = VECTOR2_ADD(direction, V2(0, 1));
+  }
+  if ((input->keyboard.s.pressed)) {
+    direction = VECTOR2_ADD(direction, V2(0, -1));
+  }
+  if (VECTOR2_SQR_LEN(direction) > 0) {
+    direction = V2_NORMALIZED(direction);
+  }
+  direction = rotate_point(direction, sinf(game->rotation), cosf(game->rotation));
+
+  movement_spec_t spec = {};
+  spec.acceleration = VECTOR2_MULT_NUMBER(direction, 18.0);
+  spec.drag = V2(-6., -6.);
+  //spec.max_speed = 10;
+  move_entity(game, &game->triangle_entity, &spec, input->seconds_elapsed);
+
 
   game_render(game, input, buffer);
 }
