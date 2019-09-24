@@ -316,14 +316,21 @@ static void game_init_level(game_t *game) {
 
 static void game_init(game_t *game) {
   memset(game, 0, sizeof(game_t));
+  game->allocator.base = (uint8_t *)(game + 1);
 
   game->is_inited = true;
 
+  const buffer_t source_triangle_file = {
+    (uint8_t *) &_binary_assets_triangle_bmp_start,
+    (uint8_t *) &_binary_assets_triangle_bmp_end
+      - (uint8_t *) &_binary_assets_triangle_bmp_start
+  };
+
   buffer_t triangle_file = {};
-  triangle_file.data = (uint8_t *) &_binary_assets_triangle_bmp_start;
-  triangle_file.size
-    = (uint8_t *) &_binary_assets_triangle_bmp_end
-    - (uint8_t *) &_binary_assets_triangle_bmp_start;
+  triangle_file.size = source_triangle_file.size;
+  triangle_file.data = game_allocate(&game->allocator, triangle_file.size, 16);
+  memcpy(triangle_file.data, source_triangle_file.data, triangle_file.size);
+
   game->triangle = game_decode_bmp(triangle_file);
 
   game->pixels_per_meter = 100;
@@ -736,3 +743,15 @@ imagebuffer_t game_decode_bmp(buffer_t buffer) {
 
   return result;
 }
+
+void *game_allocate(stack_allocator_t *allocator, uint32_t size,
+                    uint32_t alignment) {
+  uint32_t adjustment = (alignment - ((size_t)allocator->base + allocator->used) % alignment);
+  if (adjustment == alignment) {
+    adjustment = 0;
+  }
+  uint8_t *base = allocator->base + allocator->used + adjustment;
+  allocator->used += size + adjustment;
+  return base;
+}
+

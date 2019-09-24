@@ -13,14 +13,20 @@ typedef unsigned int uint;
 #define OUTPUT_IMAGE_HEIGHT 1080
 
 #define BYTES(X) (X)
-#define MEGABYTES(X) (1024ull * BYTES(X))
+#define KILOBYTES(X) (1024ull * BYTES(X))
+#define MEGABYTES(X) (1024ull * KILOBYTES(X))
 #define GIGABYTES(X) (1024ull * MEGABYTES(X))
 #define TERABYTES(X) (1024ull * GIGABYTES(X))
 
 #define ARR_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
 
 #ifndef NDEBUG
-#define assert(x) do { if (!(x)) { abort(); } } while(0)
+#define assert(x)                                                              \
+  do {                                                                         \
+    if (!(x)) {                                                                \
+      abort();                                                                 \
+    }                                                                          \
+  } while (0)
 #else
 #define assert(x)
 #endif
@@ -47,7 +53,7 @@ typedef struct {
 #define VECTOR2_SCALAR_MULT(a, b) ((a).x * (b).x + (a).y * (b).y)
 #define VECTOR2_SQR_LEN(a) VECTOR2_SCALAR_MULT(a, a)
 #define V2_LEN(a) sqrtf(VECTOR2_SCALAR_MULT(a, a))
-#define V2_NORMALIZED(v) V2((v).x/V2_LEN(v), (v).y/V2_LEN(v))
+#define V2_NORMALIZED(v) V2((v).x / V2_LEN(v), (v).y / V2_LEN(v))
 
 typedef struct {
   bool pressed;
@@ -115,9 +121,9 @@ typedef struct {
 
 typedef struct {
 
-#define STATIC_BODY2D_FIELDS \
-  vector2_t pos; \
-  vector2_t size; \
+#define STATIC_BODY2D_FIELDS                                                   \
+  vector2_t pos;                                                               \
+  vector2_t size;                                                              \
   vector2_t center
 
   STATIC_BODY2D_FIELDS;
@@ -142,7 +148,8 @@ typedef struct {
 } entity_wall_t;
 
 typedef enum {
-  ENTITY_TYPE_MC, ENTITY_TYPE_WALL,
+  ENTITY_TYPE_MC,
+  ENTITY_TYPE_WALL,
 } entity_type_t;
 
 typedef struct {
@@ -166,6 +173,14 @@ struct freelist_node_s {
 };
 
 typedef struct {
+  uint8_t *base;
+  uint32_t used;
+} stack_allocator_t;
+
+void *game_allocate(stack_allocator_t *allocator, uint32_t size,
+                    uint32_t alignment);
+
+typedef struct {
   bool is_inited;
   bool over;
   float pixels_per_meter;
@@ -185,6 +200,7 @@ typedef struct {
   imagebuffer_t triangle;
   float rotation;
 
+  stack_allocator_t allocator;
 } game_t;
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer);

@@ -788,14 +788,17 @@ int main(int argc, char **argv, char **envp) {
 
   struct timespec frame_timing_before, frame_timing_after, game_timer,
       game_timer_old;
+  clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
   time_t last_sec = frame_timing_before.tv_sec;
   uint fps = 0;
 
-  clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
 
 #define GAME_MEMORY_ADDRESS ((void *)(TERABYTES(32)))
-#define GAME_MEMORY_USAGE_BYTES MEGABYTES(40)
 #define PAGE_SIZE (4 * 1024)
+//#define GAME_MEMORY_USAGE_BYTES MEGABYTES(80)
+//#define GAME_MEMORY_USAGE_BYTES PAGE_SIZE * 1024 * 20
+#define GAME_MEMORY_USAGE_BYTES ((MEGABYTES(80)) / PAGE_SIZE + 1) * PAGE_SIZE
+
 
   assert((uint64_t)GAME_MEMORY_ADDRESS % PAGE_SIZE == 0);
   assert(GAME_MEMORY_USAGE_BYTES % PAGE_SIZE == 0);
