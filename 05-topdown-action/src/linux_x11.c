@@ -1,34 +1,33 @@
 #define _DEFAULT_SOURCE
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <stdbool.h>
-#include <stdint.h>
 
-#include <time.h>
-#include <unistd.h>
-#include <errno.h>
+#include <dirent.h>
 #include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <libgen.h>
+#include <linux/input-event-codes.h>
+#include <linux/input.h>
 #include <linux/limits.h>
+#include <sys/ipc.h>
 #include <sys/mman.h>
+#include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <fcntl.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <linux/input.h>
-#include <linux/input-event-codes.h>
-#include <dirent.h>
+#include <time.h>
+#include <unistd.h>
 
-#include <X11/Xlib.h>
 #include <X11/X.h>
+#include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <X11/keysym.h>
 #include <X11/extensions/XShm.h>
-
+#include <X11/keysym.h>
 
 #include "game.h"
 
@@ -42,8 +41,7 @@ buffer_t platform_load_file(const char *path) {
     goto exit;
   }
 
-  result.data = mmap(0, file_stat.st_size,
-                     PROT_READ | PROT_WRITE,
+  result.data = mmap(0, file_stat.st_size, PROT_READ | PROT_WRITE,
                      MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 
   int fd = open(path, O_RDONLY);
@@ -70,14 +68,15 @@ static bool should_continue = true;
 static Display *display;
 static Window window;
 
-//Maybe I'll find a way to easily scale/stretch image to different size
-//so it can fill whole window
+// Maybe I'll find a way to easily scale/stretch image to different size
+// so it can fill whole window
 static uint window_width = OUTPUT_IMAGE_WIDTH;
 static uint window_height = OUTPUT_IMAGE_HEIGHT;
 
-static long long timespec_elapsed(struct timespec *before, struct timespec *after) {
-  return (long long)(after->tv_sec - before->tv_sec) * 1000000000LL
-    + after->tv_nsec - before->tv_nsec;
+static long long timespec_elapsed(struct timespec *before,
+                                  struct timespec *after) {
+  return (long long)(after->tv_sec - before->tv_sec) * 1000000000LL +
+         after->tv_nsec - before->tv_nsec;
 }
 
 typedef struct {
@@ -98,6 +97,7 @@ typedef struct {
 } debug_input_t;
 
 static void X11EventLoop(input_t *input, debug_input_t *debug_input) {
+  (void)debug_input;
   XEvent event;
 
   input->mouse.left.transitions = 0;
@@ -356,18 +356,19 @@ int look_for_gamepad(gamepad_configuration_t *configuration) {
 
   while (n--) {
     if (result_fd < 0) {
-      snprintf(path, sizeof(path)-1, "%s/%s", directory, namelist[n]->d_name);
-      int tmp_fd = open(path, O_RDONLY|O_NONBLOCK);
+      snprintf(path, sizeof(path) - 1, "%s/%s", directory, namelist[n]->d_name);
+      int tmp_fd = open(path, O_RDONLY | O_NONBLOCK);
       if (tmp_fd > 0) {
-        //permissions and stuff
+        // permissions and stuff
         unsigned long event_bits;
         if (ioctl(tmp_fd, EVIOCGBIT(0, EV_MAX), &event_bits) != -1) {
           if (event_bits & (1 << EV_KEY)) {
-            //key press supported
+            // key press supported
             unsigned long bits[KEY_MAX / (sizeof(long) * 8) + 1] = {0};
             if (ioctl(tmp_fd, EVIOCGBIT(EV_KEY, KEY_MAX), bits) != -1) {
-              if ((bits[BTN_GAMEPAD / (8 * sizeof(long))]
-                   >> (BTN_GAMEPAD % (8 * sizeof(long)))) & 1) {
+              if ((bits[BTN_GAMEPAD / (8 * sizeof(long))] >>
+                   (BTN_GAMEPAD % (8 * sizeof(long)))) &
+                  1) {
                 printf("Gamepad found %s\n", path);
 
                 int abs[6] = {};
@@ -431,7 +432,7 @@ void handle_joystick_input(int *fd, input_t *input,
 
   struct input_event ev = {};
   int n;
-  while ( (n = read(*fd, &ev, sizeof(ev))) == sizeof(ev)) {
+  while ((n = read(*fd, &ev, sizeof(ev))) == sizeof(ev)) {
     switch (ev.type) {
     case EV_KEY: {
       switch (ev.code) {
@@ -520,7 +521,6 @@ void handle_joystick_input(int *fd, input_t *input,
         }
         input->gamepad.right_stick_button.pressed = ev.value;
       } break;
-
       }
     } break;
     case EV_ABS: {
@@ -558,10 +558,10 @@ void handle_joystick_input(int *fd, input_t *input,
         }
       } break;
       case ABS_Z: {
-        input->gamepad.left_trigger = (float) ev.value / config->lt_max;
+        input->gamepad.left_trigger = (float)ev.value / config->lt_max;
       } break;
       case ABS_RZ: {
-        input->gamepad.right_trigger = (float) ev.value / config->rt_max;
+        input->gamepad.right_trigger = (float)ev.value / config->rt_max;
       } break;
       case ABS_HAT0X: {
         if (ev.value == 0) {
@@ -650,28 +650,33 @@ int main(int argc, char **argv, char **envp) {
     if (argv[0][0] == '/') {
       char *it = argv[0];
       char *write_it = exe_basedir_buffer;
-      while (*it) *write_it++ = *it++;
+      while (*it)
+        *write_it++ = *it++;
       exe_basedir = dirname(exe_basedir_buffer);
     } else {
       char cwd_buffer[2 * PATH_MAX];
       char *write_it = getcwd(cwd_buffer, sizeof(cwd_buffer));
       printf("cwd: %s\n", write_it);
-      while (*++write_it) {}
+      while (*++write_it) {
+      }
       *write_it++ = '/';
 
       char *it = argv[0];
-      while ((*write_it++ = *it++)) {};
+      while ((*write_it++ = *it++)) {
+      };
       exe_basedir = dirname(cwd_buffer);
       it = cwd_buffer;
       write_it = exe_basedir_buffer;
-      while ((*write_it++ = *it++)) {}
+      while ((*write_it++ = *it++)) {
+      }
       exe_basedir = exe_basedir_buffer;
     }
 
     printf("%s\n", exe_basedir);
 
     char *it = exe_basedir;
-    while (*++it != 0) {}
+    while (*++it != 0) {
+    }
     sprintf(it, "/%s", game_library_name);
     path_to_game_library = exe_basedir;
   }
@@ -687,21 +692,20 @@ int main(int argc, char **argv, char **envp) {
   XSetIOErrorHandler(game_tXIOErrorHandler);
 
   Window rootWindow = XDefaultRootWindow(display);
-  window = XCreateSimpleWindow(
-    display, rootWindow,
-    0, 0, /*pos*/
-    window_width, window_height, /*width height*/
-    0, /*border width*/
-    0, /*border pixel*/
-    0  /*background pixel*/);
+  window = XCreateSimpleWindow(display, rootWindow, 0, 0,   /*pos*/
+                               window_width, window_height, /*width height*/
+                               0,                           /*border width*/
+                               0,                           /*border pixel*/
+                               0 /*background pixel*/);
   XStoreName(display, window, GAME_NAME);
   int screen = DefaultScreen(display);
 
   wmDeleteWindow = XInternAtom(display, "WM_DELETE_WINDOW", False);
   XSetWMProtocols(display, window, &wmDeleteWindow, 1);
 
-  long event_mask = ResizeRedirectMask | StructureNotifyMask | KeyPressMask
-    | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask;
+  long event_mask = ResizeRedirectMask | StructureNotifyMask | KeyPressMask |
+                    KeyReleaseMask | ButtonPressMask | ButtonReleaseMask |
+                    PointerMotionMask;
   XSelectInput(display, window, event_mask);
   XMapWindow(display, window);
 
@@ -722,22 +726,22 @@ int main(int argc, char **argv, char **envp) {
   memset(&xshm_segment_info, 0, sizeof(xshm_segment_info));
 
   int depth = DefaultDepth(display, screen);
-  XImage *image = XShmCreateImage(display, visual, depth, ZPixmap,
-                                  NULL, &xshm_segment_info,
-                                  image_width, image_height);
+  XImage *image =
+      XShmCreateImage(display, visual, depth, ZPixmap, NULL, &xshm_segment_info,
+                      image_width, image_height);
 
   if (!image) {
     FatalError("Failed to create image");
   }
 
-  xshm_segment_info.shmid = shmget(IPC_PRIVATE, image_buffer_size,
-                                   IPC_CREAT|0777);
+  xshm_segment_info.shmid =
+      shmget(IPC_PRIVATE, image_buffer_size, IPC_CREAT | 0777);
   if (xshm_segment_info.shmid < 0) {
     perror(strerror(errno));
     FatalError("Failed to get shared memory");
   }
   xshm_segment_info.shmaddr = shmat(xshm_segment_info.shmid, NULL, 0);
-  if(!xshm_segment_info.shmaddr) {
+  if (!xshm_segment_info.shmaddr) {
     perror(strerror(errno));
     FatalError("Failed to map shared memory to process");
   }
@@ -745,7 +749,7 @@ int main(int argc, char **argv, char **envp) {
   xshm_segment_info.readOnly = 0;
 
   image->data = xshm_segment_info.shmaddr;
-  uint *image_buffer = (uint *) image->data;
+  uint *image_buffer = (uint *)image->data;
 
   if (!XShmAttach(display, &xshm_segment_info)) {
     FatalError("Failed to attach XShm");
@@ -756,35 +760,34 @@ int main(int argc, char **argv, char **envp) {
     Window tmp;
     int tmpi;
     uint tmpu;
-    //broken, returned coordinates are for root window probably
-    XQueryPointer(display, rootWindow,
-                      &tmp, &tmp,
-                      &tmpi, &tmpi,
-                      &input.mouse.x, &input.mouse.y,
-                      &tmpu);
+    // broken, returned coordinates are for root window probably
+    XQueryPointer(display, rootWindow, &tmp, &tmp, &tmpi, &tmpi, &input.mouse.x,
+                  &input.mouse.y, &tmpu);
 
-//    Pixmap bm_no;
-//    Colormap cmap;
-//    Cursor no_ptr;
-//    XColor black, dummy;
-//    static char bm_no_data[] = {0, 0, 0, 0, 0, 0, 0, 0};
-//
-//    cmap = DefaultColormap(display, DefaultScreen(display));
-//    XAllocNamedColor(display, cmap, "black", &black, &dummy);
-//    bm_no = XCreateBitmapFromData(display, window, bm_no_data, 8, 8);
-//    no_ptr = XCreatePixmapCursor(display, bm_no, bm_no, &black, &black, 0, 0);
-//
-//    XDefineCursor(display, window, no_ptr);
-//    XFreeCursor(display, no_ptr);
-//    if (bm_no != None)
-//      XFreePixmap(display, bm_no);
-//    XFreeColors(display, cmap, &black.pixel, 1, 0);
+    //    Pixmap bm_no;
+    //    Colormap cmap;
+    //    Cursor no_ptr;
+    //    XColor black, dummy;
+    //    static char bm_no_data[] = {0, 0, 0, 0, 0, 0, 0, 0};
+    //
+    //    cmap = DefaultColormap(display, DefaultScreen(display));
+    //    XAllocNamedColor(display, cmap, "black", &black, &dummy);
+    //    bm_no = XCreateBitmapFromData(display, window, bm_no_data, 8, 8);
+    //    no_ptr = XCreatePixmapCursor(display, bm_no, bm_no, &black, &black, 0,
+    //    0);
+    //
+    //    XDefineCursor(display, window, no_ptr);
+    //    XFreeCursor(display, no_ptr);
+    //    if (bm_no != None)
+    //      XFreePixmap(display, bm_no);
+    //    XFreeColors(display, cmap, &black.pixel, 1, 0);
   }
   struct timespec sleep_interval;
   sleep_interval.tv_sec = 0;
   sleep_interval.tv_nsec = 0;
 
-  struct timespec frame_timing_before, frame_timing_after, game_timer, game_timer_old;
+  struct timespec frame_timing_before, frame_timing_after, game_timer,
+      game_timer_old;
   time_t last_sec = frame_timing_before.tv_sec;
   uint fps = 0;
 
@@ -797,29 +800,26 @@ int main(int argc, char **argv, char **envp) {
   assert((uint64_t)GAME_MEMORY_ADDRESS % PAGE_SIZE == 0);
   assert(GAME_MEMORY_USAGE_BYTES % PAGE_SIZE == 0);
 
-
-  void *memory = mmap(GAME_MEMORY_ADDRESS, GAME_MEMORY_USAGE_BYTES,
-                      PROT_READ | PROT_WRITE,
-                      MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED,
-                      -1, 0);
+  void *memory =
+      mmap(GAME_MEMORY_ADDRESS, GAME_MEMORY_USAGE_BYTES, PROT_READ | PROT_WRITE,
+           MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
 
   assert(memory == GAME_MEMORY_ADDRESS);
   memset(memory, 0, GAME_MEMORY_USAGE_BYTES);
 
   debug_repeat_loop_data_t loop_data = {};
-  loop_data.memory = mmap(0, GAME_MEMORY_USAGE_BYTES,
-                                  PROT_READ | PROT_WRITE,
-                                  MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  loop_data.memory = mmap(0, GAME_MEMORY_USAGE_BYTES, PROT_READ | PROT_WRITE,
+                          MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   assert(loop_data.memory != 0);
 
-  loop_data.inputs_size_in_elements = 60/*FPS*/ * 120/*seconds*/;
-  int max_recorded_input_size = loop_data.inputs_size_in_elements * sizeof(input_t);
-  loop_data.inputs = mmap(0, max_recorded_input_size,
-                                  PROT_READ | PROT_WRITE,
-                                  MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  loop_data.inputs_size_in_elements = 60 /*FPS*/ * 120 /*seconds*/;
+  int max_recorded_input_size =
+      loop_data.inputs_size_in_elements * sizeof(input_t);
+  loop_data.inputs = mmap(0, max_recorded_input_size, PROT_READ | PROT_WRITE,
+                          MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   assert(loop_data.inputs != NULL);
 
-  uint32_t *back_image_buffer = (uint32_t *) malloc(image_buffer_size);
+  uint32_t *back_image_buffer = (uint32_t *)malloc(image_buffer_size);
   drawing_buffer_t drawing_buffer;
   drawing_buffer.buffer = back_image_buffer;
   drawing_buffer.width = image_width;
@@ -837,10 +837,11 @@ int main(int argc, char **argv, char **envp) {
   gamepad_configuration_t gamepad_configuration = {};
   int joystick_fd = look_for_gamepad(&gamepad_configuration);
 
-  while(should_continue) {
+  while (should_continue) {
     stat(path_to_game_library, &game_library_file_stat_new);
-    if (game_library_file_stat_old.st_mtim.tv_sec < game_library_file_stat_new.st_mtim.tv_sec
-        && game_library_file_stat_new.st_mtim.tv_sec + 1 < time(NULL)) {
+    if (game_library_file_stat_old.st_mtim.tv_sec <
+            game_library_file_stat_new.st_mtim.tv_sec &&
+        game_library_file_stat_new.st_mtim.tv_sec + 1 < time(NULL)) {
       game_library_close(&library);
       game_library_open(&library, path_to_game_library);
       game_library_file_stat_old = game_library_file_stat_new;
@@ -871,7 +872,8 @@ int main(int argc, char **argv, char **envp) {
       printf("Start recording\n");
     }
     if (loop_data.is_recording) {
-      assert(loop_data.next_input_index_to_write < loop_data.inputs_size_in_elements);
+      assert(loop_data.next_input_index_to_write <
+             loop_data.inputs_size_in_elements);
       loop_data.inputs[loop_data.next_input_index_to_write++] = input;
     }
     if (debug_input.stop_recording && loop_data.is_recording) {
@@ -905,8 +907,8 @@ int main(int argc, char **argv, char **envp) {
     if (frame_timing_after.tv_sec == last_sec) {
       ++fps;
     } else {
-      //printf("\rFPS = %u              ", fps);
-      //fflush(stdout);
+      // printf("\rFPS = %u              ", fps);
+      // fflush(stdout);
       fps = 1;
       last_sec = frame_timing_after.tv_sec;
     }
@@ -915,8 +917,8 @@ int main(int argc, char **argv, char **envp) {
     clock_gettime(CLOCK_MONOTONIC, &frame_timing_before);
 
     memcpy(image_buffer, back_image_buffer, image_buffer_size);
-    XShmPutImage(display, window, DefaultGC(display, screen), image,
-                 0, 0, 0, 0, image_width, image_height, 0);
+    XShmPutImage(display, window, DefaultGC(display, screen), image, 0, 0, 0, 0,
+                 image_width, image_height, 0);
     XFlush(display);
   }
 

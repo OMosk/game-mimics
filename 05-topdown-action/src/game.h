@@ -94,26 +94,12 @@ typedef struct {
   uint8_t r, g, b, a;
 } rgba_t;
 
-typedef enum {
-  ENTITY_TYPE_MC,
-} entity_type_t;
-
-typedef struct {
-  vector2_t pos;
-  vector2_t speed;
-  vector2_t accel;
-  vector2_t size;
-  entity_type_t type;
-  rgba_t color;
-  uint32_t collision_state;
-} entity_t;
-
 typedef struct {
   uint8_t *data;
   int size;
 } buffer_t;
 
-buffer_t platform_load_file(const char *filename);
+extern buffer_t platform_load_file(const char *filename);
 
 typedef struct {
   uint32_t *data;
@@ -123,22 +109,77 @@ typedef struct {
 imagebuffer_t game_decode_bmp(buffer_t buffer);
 
 typedef struct {
-  vector2_t camera_target;
-  vector2_t current_position;
-} camera_t;
-
-typedef struct {
   imagebuffer_t image;
   ivector2_t offset;
 } sprite_t;
 
 typedef struct {
+
+#define STATIC_BODY2D_FIELDS \
+  vector2_t pos; \
+  vector2_t size; \
+  vector2_t center
+
+  STATIC_BODY2D_FIELDS;
+} static_body2d_t;
+
+typedef struct {
+  STATIC_BODY2D_FIELDS;
+  vector2_t speed;
+  vector2_t accel;
+} body2d_t; // inherits static_body2d_t
+
+typedef struct {
+  body2d_t body;
+  vector2_t direction_vector;
+  float rotation_angle;
+  sprite_t sprite;
+} entity_mc_t;
+
+typedef struct {
+  static_body2d_t body;
+  rgba_t color;
+} entity_wall_t;
+
+typedef enum {
+  ENTITY_TYPE_MC, ENTITY_TYPE_WALL,
+} entity_type_t;
+
+typedef struct {
+  entity_type_t type;
+  union {
+    entity_mc_t mc;
+    entity_wall_t wall;
+  } u;
+} entity_t;
+
+typedef struct {
+  vector2_t camera_target;
+  vector2_t current_position;
+} camera_t;
+
+struct freelist_node_s;
+typedef struct freelist_node_s freelist_node_t;
+
+struct freelist_node_s {
+  freelist_node_t *next;
+};
+
+typedef struct {
   bool is_inited;
   bool over;
   float pixels_per_meter;
-  entity_t triangle_entity;
-  entity_t entities[256];
+
+  entity_t *mc;
+
+  entity_t *active_entities[256];
+  uint32_t active_entities_count;
+
+  entity_t entities_pool[256];
   uint32_t entities_count;
+
+  freelist_node_t *next_free_entity;
+
   vector2_t cursor_double;
 
   imagebuffer_t triangle;

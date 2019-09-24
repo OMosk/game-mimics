@@ -1,4 +1,5 @@
 #include "game.h"
+#include "assets.h"
 
 #include <string.h>
 #include <strings.h>
@@ -200,7 +201,7 @@ typedef struct {
   vector2_t size;
 } rectangle_t;
 
-static rectangle_t translate_coords(game_t *game, drawing_buffer_t *buffer, entity_t *e) {
+static rectangle_t translate_coords(game_t *game, drawing_buffer_t *buffer, static_body2d_t *e) {
   rectangle_t result = {};
   float buffer_h = buffer->height;
   float pixels_per_meter = game->pixels_per_meter;
@@ -242,17 +243,24 @@ static void game_render(game_t *game, input_t *input, drawing_buffer_t *buffer) 
   // NOTE: most time we spend here currently
   memset(buffer->buffer, 255, buffer->width * buffer->height * sizeof(*buffer->buffer));
 
-  vector2_t screen_coords = translate_point_coords(game, buffer, game->triangle_entity.pos);
+  vector2_t screen_coords
+    = translate_point_coords(game, buffer, game->mc->u.mc.body.pos);
   ivector2_t screen_coords_i = IV2(screen_coords.x, screen_coords.y);
 
   draw_rectangle(buffer, input->mouse.x, input->mouse.y, 10, 10, RGB(0, 0, 0));
-/*
-  {
-    vector2_t pos
-      = translate_point_coords(game, buffer, game->cursor_double);
-    draw_rectangle(buffer, pos.x, pos.y, 10, 10, RGB(0, 0, 0));
+
+  for (uint32_t i = 0; i < game->active_entities_count; ++i) {
+    entity_t *e = game->active_entities[i];
+    switch (e->type) {
+    case ENTITY_TYPE_MC: {
+    } break;
+    case ENTITY_TYPE_WALL: {
+
+    } break;
+    default: {
+    }
+    }
   }
-  */
 
   draw_bitmap2(buffer, game->triangle,
                screen_coords_i,//IV2(input->mouse.x, input->mouse.y),
@@ -261,17 +269,21 @@ static void game_render(game_t *game, input_t *input, drawing_buffer_t *buffer) 
                game->rotation);
 }
 
-static int
-game_push_entity(game_t *game, float x, float y, float w, float h, entity_type_t t, rgba_t color) {
-  int result = INT_MAX;
-  entity_t *e = game->entities + (game->entities_count++);
-  *e = (entity_t){};
-  e->pos.x = x;
-  e->pos.y = y;
-  e->size.x = w;
-  e->size.y = h;
-  e->type = t;
-  e->color = color;
+static entity_t *
+game_alloc_entity(game_t *game) {
+  entity_t *result = NULL;
+  if (game->next_free_entity) {
+    result = (entity_t *)game->next_free_entity;
+    game->next_free_entity = game->next_free_entity->next;
+  } else {
+    if (game->entities_count >= ARR_LEN(game->entities_pool)) {
+      //Pool exhaustion
+      abort();
+    }
+    result = game->entities_pool + game->entities_count;
+    game->entities_count++;
+  }
+  game->active_entities[game->active_entities_count++] = result;
   return result;
 }
 
@@ -279,14 +291,47 @@ static float lerp(float a, float b, float t) {
   return a + t*(b - a);
 }
 
-void game_init(game_t *game) {
+static void game_init_mc(game_t *game, entity_t *e) {
+  (void)game;
+  *e = (entity_t){};
+  e->type = ENTITY_TYPE_MC;
+  e->u.mc.body.pos = V2(5, 5);
+}
+
+static void game_create_wall(game_t *game, float x, float y, float w, float h) {
+  entity_t *e = game_alloc_entity(game);
+  e->type = ENTITY_TYPE_WALL;
+  e->u.wall.body.pos.x = x + w/2.0;
+  e->u.wall.body.pos.y = y + h/2.0;
+  e->u.wall.body.center.x = w/2.0;
+  e->u.wall.body.center.y = h/2.0;
+  e->u.wall.body.size.x = w;
+  e->u.wall.body.size.y = h;
+  *(uint32_t *)&e->u.wall.color = rand() % UINT32_MAX;
+}
+
+static void game_init_level(game_t *game) {
+  (void)game;
+}
+
+static void game_init(game_t *game) {
+  memset(game, 0, sizeof(game_t));
+
   game->is_inited = true;
 
-  buffer_t triangle_file = platform_load_file("../assets/triangle.bmp");
+  buffer_t triangle_file = {};
+  triangle_file.data = (uint8_t *) &_binary_assets_triangle_bmp_start;
+  triangle_file.size
+    = (uint8_t *) &_binary_assets_triangle_bmp_end
+    - (uint8_t *) &_binary_assets_triangle_bmp_start;
   game->triangle = game_decode_bmp(triangle_file);
 
   game->pixels_per_meter = 100;
-  game->triangle_entity.pos = V2(5, 5);
+
+  game->mc = game_alloc_entity(game);
+  game_init_mc(game, game->mc);
+
+  game_init_level(game);
 }
 
 gamepad_input_t old = {};
@@ -395,7 +440,7 @@ static float segment_ray_intersection(segment_t segment1, ray_t ray, float def_r
 }
 
 static float
-get_collision_time(entity_t *stationary, entity_t *moving,
+get_collision_time(static_body2d_t *stationary, static_body2d_t *moving,
                    vector2_t dp, float dt, vector2_t *hit_line) {
   float result = dt;
 
@@ -466,7 +511,7 @@ point_to_segment_distance_sqr(segment_t segment, vector2_t point) {
 }
 
 static bool
-is_colliding(entity_t *stationary, entity_t *moving, float epsilon,
+is_colliding(static_body2d_t *stationary, static_body2d_t *moving, float epsilon,
              segment_t *hit_line) {
   bool result = false;
 
@@ -518,7 +563,12 @@ typedef struct {
   vector2_t max_speed;
 } movement_spec_t;
 
-static void move_entity(game_t *game, entity_t *c, movement_spec_t *spec, float dt) {
+static void
+move_entity(
+  game_t *game,
+  entity_t *target_entity, body2d_t *c,
+  movement_spec_t *spec, float dt) {
+
   c->accel = spec->acceleration;
   c->speed = VECTOR2_ADD(c->speed, VECTOR2_MULT_NUMBER(c->accel, dt));
   vector2_t drag = V2(c->speed.x * spec->drag.x * dt, c->speed.y * spec->drag.y * dt);
@@ -529,8 +579,11 @@ static void move_entity(game_t *game, entity_t *c, movement_spec_t *spec, float 
     vector2_t new_dp = V2(0.0f, 0.0f);
 
     if (game_sqrt(VECTOR2_SQR_LEN(c->speed)) > 1e-8f) {
-      for (uint32_t i = 0; i < game->entities_count; ++i) {
-        entity_t *o = game->entities + i;
+      for (uint32_t i = 0; i < game->active_entities_count; ++i) {
+        entity_t *o = game->active_entities[i];
+        if (o == target_entity) {
+          continue;
+        }
         switch (o->type) {
         default: {
           assert(0);
@@ -570,7 +623,8 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   vector2_t cursor_screen_coords = V2(input->mouse.x, input->mouse.y);
   vector2_t cursor_physics_coords
     = translate_screen_coords_to_physics_coords(game, buffer, cursor_screen_coords);
-  vector2_t looking_direction = VECTOR2_SUB(cursor_physics_coords, game->triangle_entity.pos);
+  vector2_t looking_direction = VECTOR2_SUB(cursor_physics_coords,
+                                            game->mc->u.mc.body.pos);
 
   float angle_radians = atan2f(looking_direction.y, looking_direction.x);
   game->rotation = angle_radians - M_PI/2.0f;
@@ -597,8 +651,7 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   spec.acceleration = VECTOR2_MULT_NUMBER(direction, 18.0);
   spec.drag = V2(-6., -6.);
   //spec.max_speed = 10;
-  move_entity(game, &game->triangle_entity, &spec, input->seconds_elapsed);
-
+  move_entity(game, game->mc, &game->mc->u.mc.body, &spec, input->seconds_elapsed);
 
   game_render(game, input, buffer);
 }
