@@ -4,8 +4,8 @@ PLATFORM_LIBRARIES = -lX11 -lXext -ldl
 
 all: build/libgame.so build/platform
 
-build/%.o: src/%.c
-	$(CC) $(CFLAGS) -fPIC  -c $^ -o $@
+build/game.o: src/game.c
+	$(CC) $(CFLAGS) -fPIC  -c src/game.c -o $@
 
 build/assets.o: assets/triangle.bmp
 	ld -r -b binary -o build/triangle.o assets/triangle.bmp
