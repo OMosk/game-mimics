@@ -236,28 +236,60 @@ static void game_render(game_t *game, input_t *input,
   memset(buffer->buffer, 255,
          buffer->width * buffer->height * sizeof(*buffer->buffer));
 
-  vector2_t screen_coords =
-      translate_point_coords(game, buffer, game->mc->u.mc.body.pos);
-  ivector2_t screen_coords_i = IV2(screen_coords.x, screen_coords.y);
 
   draw_rectangle(buffer, input->mouse.x, input->mouse.y, 10, 10, RGB(0, 0, 0));
+
+  /*{
+    vector2_t screen_coords =
+      translate_point_coords(game, buffer, game->mc->u.mc.body.pos);
+    ivector2_t screen_coords_i = IV2(screen_coords.x, screen_coords.y);
+
+    draw_bitmap2(buffer, game->triangle,
+                 screen_coords_i, // IV2(input->mouse.x, input->mouse.y),
+                 IV2(64, 64), 1.0f, game->rotation);
+  }*/
 
   for (uint32_t i = 0; i < game->active_entities_count; ++i) {
     entity_t *e = game->active_entities[i];
     switch (e->type) {
     case ENTITY_TYPE_MC: {
+      vector2_t pos = e->u.mc.body.pos;
+      vector2_t size = e->u.mc.body.size;
+      uint32_t color = RGBA(0, 0, 0, 255);
+      vector2_t top_left = V2(pos.x, pos.y + size.y);
+      vector2_t center = V2(pos.x + size.x/2., pos.y + size.y/2.);
+
+      top_left = translate_point_coords(game, buffer, top_left);
+      center = translate_point_coords(game, buffer, center);
+
+
+      draw_rectangle(buffer, top_left.x, top_left.y,
+                     size.x * game->pixels_per_meter,
+                     size.y * game->pixels_per_meter, color);
+      {
+        ivector2_t screen_coords_i = IV2(center.x, center.y);
+        draw_bitmap2(buffer, game->triangle,
+                     screen_coords_i, // IV2(input->mouse.x, input->mouse.y),
+                     IV2(64, 64), 1.0f, game->rotation);
+
+      }
     } break;
     case ENTITY_TYPE_WALL: {
+      vector2_t pos = e->u.wall.body.pos;
+      vector2_t size = e->u.wall.body.size;
+      uint32_t color = *(uint32_t *)&e->u.wall.color;
+      vector2_t top_left = V2(pos.x, pos.y + size.y);
 
+      top_left = translate_point_coords(game, buffer, top_left);
+      draw_rectangle(buffer, top_left.x, top_left.y,
+                     size.x * game->pixels_per_meter,
+                     size.y * game->pixels_per_meter, color);
     } break;
     default: {
     }
     }
   }
 
-  draw_bitmap2(buffer, game->triangle,
-               screen_coords_i, // IV2(input->mouse.x, input->mouse.y),
-               IV2(64, 64), 1.0f, game->rotation);
 }
 
 static entity_t *game_alloc_entity(game_t *game) {
@@ -284,8 +316,11 @@ static void game_init_mc(game_t *game, entity_t *e) {
   *e = (entity_t){};
   e->type = ENTITY_TYPE_MC;
   e->u.mc.body.pos = V2(5, 5);
+  e->u.mc.body.center = V2(0.5, 0.5);
+  e->u.mc.body.size = V2(1, 1);
 }
 
+//create wall by specifying bottom-left corner coordinates and size
 static void game_create_wall(game_t *game, float x, float y, float w, float h) {
   entity_t *e = game_alloc_entity(game);
   e->type = ENTITY_TYPE_WALL;
@@ -298,7 +333,10 @@ static void game_create_wall(game_t *game, float x, float y, float w, float h) {
   *(uint32_t *)&e->u.wall.color = rand() % UINT32_MAX;
 }
 
-static void game_init_level(game_t *game) { (void)game; }
+static void game_init_level(game_t *game) {
+  game_create_wall(game, -0.5, -0.5, 1, 1);
+  //scale and relation
+}
 
 static void game_init(game_t *game) {
   memset(game, 0, sizeof(game_t));
@@ -576,6 +614,17 @@ static void move_entity(game_t *game, entity_t *target_entity, body2d_t *c,
           continue;
         }
         switch (o->type) {
+        case ENTITY_TYPE_WALL: {
+          vector2_t wall = V2(0.0f, 0.0f);
+          float tmp_dt = get_collision_time(&o->u.wall.body, (static_body2d_t *)c,
+                                         c->speed, dt, &wall);
+          if (tmp_dt < actual_dt) {
+            actual_dt = tmp_dt;
+            new_dp = VECTOR2_MULT_NUMBER(wall,
+              VECTOR2_SCALAR_MULT(wall, c->speed) / VECTOR2_SQR_LEN(wall));
+          }
+
+        } break;
         default: {
           assert(0);
         }
@@ -594,23 +643,7 @@ static void move_entity(game_t *game, entity_t *target_entity, body2d_t *c,
   }
 }
 
-void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
-  game_t *game = (game_t *)memory;
-
-  if (!game->is_inited) {
-    game_init(game);
-  }
-  if (input->restart) {
-    game_init(game);
-    input->restart = false;
-  }
-
-  if (!game->over) {
-    if (input->pause) {
-      return;
-    }
-  }
-
+void game_handle_input(game_t *game, input_t *input, drawing_buffer_t *buffer) {
   vector2_t cursor_screen_coords = V2(input->mouse.x, input->mouse.y);
   vector2_t cursor_physics_coords = translate_screen_coords_to_physics_coords(
       game, buffer, cursor_screen_coords);
@@ -645,6 +678,28 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   // spec.max_speed = 10;
   move_entity(game, game->mc, &game->mc->u.mc.body, &spec,
               input->seconds_elapsed);
+
+}
+
+void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
+  game_t *game = (game_t *)memory;
+
+  if (!game->is_inited) {
+    game_init(game);
+  }
+  if (input->restart) {
+    game_init(game);
+    input->restart = false;
+  }
+
+  if (!game->over) {
+    if (input->pause) {
+      return;
+    }
+  }
+
+  game_handle_input(game, input, buffer);
+
 
   game_render(game, input, buffer);
 }

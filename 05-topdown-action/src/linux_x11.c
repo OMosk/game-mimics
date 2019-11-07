@@ -664,7 +664,7 @@ int main(int argc, char **argv, char **envp) {
       char *it = argv[0];
       while ((*write_it++ = *it++)) {
       };
-      exe_basedir = dirname(cwd_buffer);
+      dirname(cwd_buffer);
       it = cwd_buffer;
       write_it = exe_basedir_buffer;
       while ((*write_it++ = *it++)) {
@@ -925,6 +925,7 @@ int main(int argc, char **argv, char **envp) {
     XFlush(display);
   }
 
+  free(back_image_buffer);
   XCloseDisplay(display);
 
   return 0;
