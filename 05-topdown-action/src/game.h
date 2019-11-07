@@ -54,6 +54,8 @@ typedef struct {
 #define VECTOR2_SQR_LEN(a) VECTOR2_SCALAR_MULT(a, a)
 #define V2_LEN(a) sqrtf(VECTOR2_SCALAR_MULT(a, a))
 #define V2_NORMALIZED(v) V2((v).x / V2_LEN(v), (v).y / V2_LEN(v))
+#define V2_ADD(a, b) VECTOR2_ADD(a, b)
+#define V2_MULT_NUMBER(a, b) VECTOR2_MULT_NUMBER(a, b)
 
 typedef struct {
   bool pressed;

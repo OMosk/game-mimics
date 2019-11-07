@@ -648,7 +648,9 @@ void game_handle_input(game_t *game, input_t *input, drawing_buffer_t *buffer) {
   vector2_t cursor_physics_coords = translate_screen_coords_to_physics_coords(
       game, buffer, cursor_screen_coords);
   vector2_t looking_direction =
-      VECTOR2_SUB(cursor_physics_coords, game->mc->u.mc.body.pos);
+      VECTOR2_SUB(cursor_physics_coords,
+                  V2_ADD(game->mc->u.mc.body.pos,
+                         V2_MULT_NUMBER(game->mc->u.mc.body.size, 0.5)));
 
   float angle_radians = atan2f(looking_direction.y, looking_direction.x);
   game->rotation = angle_radians - M_PI / 2.0f;
