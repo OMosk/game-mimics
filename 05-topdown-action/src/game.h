@@ -121,12 +121,16 @@ typedef struct {
   ivector2_t offset;
 } sprite_t;
 
+/*
+ * pos -- coords of object center in meters
+ * size -- size of 2d rectangle in meters,
+ */
+
 typedef struct {
 
 #define STATIC_BODY2D_FIELDS                                                   \
   vector2_t pos;                                                               \
   vector2_t size;                                                              \
-  vector2_t center
 
   STATIC_BODY2D_FIELDS;
 } static_body2d_t;
@@ -135,7 +139,7 @@ typedef struct {
   STATIC_BODY2D_FIELDS;
   vector2_t speed;
   vector2_t accel;
-} body2d_t; // inherits static_body2d_t
+} body2d_t; // inherits static_body2d_
 
 typedef struct {
   body2d_t body;
@@ -149,9 +153,16 @@ typedef struct {
   rgba_t color;
 } entity_wall_t;
 
+typedef struct {
+  body2d_t body;
+  float left_to_live;
+} entity_projectile_t;
+#define PROJECTILE_SPEED 5.f
+
 typedef enum {
   ENTITY_TYPE_MC,
   ENTITY_TYPE_WALL,
+  ENTITY_TYPE_PROJECTILE,
 } entity_type_t;
 
 typedef struct {
@@ -159,6 +170,7 @@ typedef struct {
   union {
     entity_mc_t mc;
     entity_wall_t wall;
+    entity_projectile_t projectile;
   } u;
 } entity_t;
 
@@ -200,7 +212,6 @@ typedef struct {
   vector2_t cursor_double;
 
   imagebuffer_t triangle;
-  float rotation;
 
   stack_allocator_t allocator;
 } game_t;

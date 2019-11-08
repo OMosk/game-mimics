@@ -239,16 +239,6 @@ static void game_render(game_t *game, input_t *input,
 
   draw_rectangle(buffer, input->mouse.x, input->mouse.y, 10, 10, RGB(0, 0, 0));
 
-  /*{
-    vector2_t screen_coords =
-      translate_point_coords(game, buffer, game->mc->u.mc.body.pos);
-    ivector2_t screen_coords_i = IV2(screen_coords.x, screen_coords.y);
-
-    draw_bitmap2(buffer, game->triangle,
-                 screen_coords_i, // IV2(input->mouse.x, input->mouse.y),
-                 IV2(64, 64), 1.0f, game->rotation);
-  }*/
-
   for (uint32_t i = 0; i < game->active_entities_count; ++i) {
     entity_t *e = game->active_entities[i];
     switch (e->type) {
@@ -256,8 +246,8 @@ static void game_render(game_t *game, input_t *input,
       vector2_t pos = e->u.mc.body.pos;
       vector2_t size = e->u.mc.body.size;
       uint32_t color = RGBA(0, 0, 0, 255);
-      vector2_t top_left = V2(pos.x, pos.y + size.y);
-      vector2_t center = V2(pos.x + size.x/2., pos.y + size.y/2.);
+      vector2_t top_left = V2(pos.x - size.x/2., pos.y + size.y/2.);
+      vector2_t center = V2(pos.x, pos.y);
 
       top_left = translate_point_coords(game, buffer, top_left);
       center = translate_point_coords(game, buffer, center);
@@ -269,8 +259,8 @@ static void game_render(game_t *game, input_t *input,
       {
         ivector2_t screen_coords_i = IV2(center.x, center.y);
         draw_bitmap2(buffer, game->triangle,
-                     screen_coords_i, // IV2(input->mouse.x, input->mouse.y),
-                     IV2(64, 64), 1.0f, game->rotation);
+                     screen_coords_i,
+                     IV2(64, 64), 1.0f, e->u.mc.rotation_angle);
 
       }
     } break;
@@ -278,6 +268,17 @@ static void game_render(game_t *game, input_t *input,
       vector2_t pos = e->u.wall.body.pos;
       vector2_t size = e->u.wall.body.size;
       uint32_t color = *(uint32_t *)&e->u.wall.color;
+      vector2_t top_left = V2(pos.x-size.x/2., pos.y + size.y/2.);
+
+      top_left = translate_point_coords(game, buffer, top_left);
+      draw_rectangle(buffer, top_left.x, top_left.y,
+                     size.x * game->pixels_per_meter,
+                     size.y * game->pixels_per_meter, color);
+    } break;
+    case ENTITY_TYPE_PROJECTILE: {
+      vector2_t pos = e->u.projectile.body.pos;
+      vector2_t size = e->u.projectile.body.size;
+      uint32_t color = RGBA(0, 0, 0, 255);
       vector2_t top_left = V2(pos.x, pos.y + size.y);
 
       top_left = translate_point_coords(game, buffer, top_left);
@@ -299,6 +300,7 @@ static entity_t *game_alloc_entity(game_t *game) {
     game->next_free_entity = game->next_free_entity->next;
   } else {
     if (game->entities_count >= ARR_LEN(game->entities_pool)) {
+      printf("%s:%d entities pool was exhausted\n", __FILE__, __LINE__);
       // Pool exhaustion
       abort();
     }
@@ -316,7 +318,6 @@ static void game_init_mc(game_t *game, entity_t *e) {
   *e = (entity_t){};
   e->type = ENTITY_TYPE_MC;
   e->u.mc.body.pos = V2(5, 5);
-  e->u.mc.body.center = V2(0.5, 0.5);
   e->u.mc.body.size = V2(1, 1);
 }
 
@@ -326,15 +327,14 @@ static void game_create_wall(game_t *game, float x, float y, float w, float h) {
   e->type = ENTITY_TYPE_WALL;
   e->u.wall.body.pos.x = x + w / 2.0;
   e->u.wall.body.pos.y = y + h / 2.0;
-  e->u.wall.body.center.x = w / 2.0;
-  e->u.wall.body.center.y = h / 2.0;
   e->u.wall.body.size.x = w;
   e->u.wall.body.size.y = h;
   *(uint32_t *)&e->u.wall.color = rand() % UINT32_MAX;
 }
 
 static void game_init_level(game_t *game) {
-  game_create_wall(game, -0.5, -0.5, 1, 1);
+  game_create_wall(game, 0, 0, 1, 1);
+  game_create_wall(game, 1, 0, 10, 1);
   //scale and relation
 }
 
@@ -625,6 +625,10 @@ static void move_entity(game_t *game, entity_t *target_entity, body2d_t *c,
           }
 
         } break;
+        case ENTITY_TYPE_PROJECTILE: {
+        } break;
+        case ENTITY_TYPE_MC: {
+        } break;
         default: {
           assert(0);
         }
@@ -643,17 +647,31 @@ static void move_entity(game_t *game, entity_t *target_entity, body2d_t *c,
   }
 }
 
+void game_shoot_projectile(game_t *game, vector2_t initial_pos,
+                           vector2_t shooter_speed, vector2_t direction) {
+  entity_t *projectile = game_alloc_entity(game);
+  entity_t *p = projectile;
+  *p = (entity_t){};
+  p->type = ENTITY_TYPE_PROJECTILE;
+  p->u.projectile.body.pos = initial_pos;
+  p->u.projectile.body.speed = V2_MULT_NUMBER(direction, PROJECTILE_SPEED);
+  p->u.projectile.body.speed = V2_ADD(p->u.projectile.body.speed, shooter_speed);
+  p->u.projectile.body.size = V2(0.1, 0.1);
+  p->u.projectile.left_to_live = 5;
+}
+
 void game_handle_input(game_t *game, input_t *input, drawing_buffer_t *buffer) {
   vector2_t cursor_screen_coords = V2(input->mouse.x, input->mouse.y);
   vector2_t cursor_physics_coords = translate_screen_coords_to_physics_coords(
       game, buffer, cursor_screen_coords);
+
+  vector2_t mc_center = game->mc->u.mc.body.pos;
+
   vector2_t looking_direction =
-      VECTOR2_SUB(cursor_physics_coords,
-                  V2_ADD(game->mc->u.mc.body.pos,
-                         V2_MULT_NUMBER(game->mc->u.mc.body.size, 0.5)));
+      VECTOR2_SUB(cursor_physics_coords, mc_center);
 
   float angle_radians = atan2f(looking_direction.y, looking_direction.x);
-  game->rotation = angle_radians - M_PI / 2.0f;
+  game->mc->u.mc.rotation_angle = angle_radians - M_PI / 2.0f;
 
   vector2_t direction = {0};
   if ((input->keyboard.a.pressed)) {
@@ -671,8 +689,8 @@ void game_handle_input(game_t *game, input_t *input, drawing_buffer_t *buffer) {
   if (VECTOR2_SQR_LEN(direction) > 0) {
     direction = V2_NORMALIZED(direction);
   }
-  direction =
-      rotate_point(direction, sinf(game->rotation), cosf(game->rotation));
+  //direction =
+  //    rotate_point(direction, sinf(game->rotation), cosf(game->rotation));
 
   movement_spec_t spec = {};
   spec.acceleration = VECTOR2_MULT_NUMBER(direction, 18.0);
@@ -681,6 +699,39 @@ void game_handle_input(game_t *game, input_t *input, drawing_buffer_t *buffer) {
   move_entity(game, game->mc, &game->mc->u.mc.body, &spec,
               input->seconds_elapsed);
 
+  if (was_pressed(input->mouse.left)) {
+    vector2_t normalized_looking_direction = V2_NORMALIZED(looking_direction);
+    game_shoot_projectile(game, mc_center,
+                          game->mc->u.mc.body.speed, normalized_looking_direction);
+  }
+
+}
+
+void game_update_entities(game_t *game, input_t *input) {
+  for (uint32_t i = 0; i < game->active_entities_count; ++i) {
+    entity_t *e = game->active_entities[i];
+    switch (e->type) {
+    case ENTITY_TYPE_PROJECTILE: {
+      entity_projectile_t *projectile = &e->u.projectile;
+
+      movement_spec_t spec = {};
+      move_entity(game, e, &projectile->body, &spec, input->seconds_elapsed);
+      //printf("%f,  %f\n", projectile->body.accel.x, projectile->body.accel.y);
+
+      projectile->left_to_live -= input->seconds_elapsed;
+      if (projectile->left_to_live < 0) {
+        game->active_entities[i] = game->active_entities[game->active_entities_count-1];
+        game->active_entities_count--;
+        --i;
+        continue;
+      }
+    } break;
+    case ENTITY_TYPE_MC: {
+    } break;
+    case ENTITY_TYPE_WALL: {
+    } break;
+    }
+  }
 }
 
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
@@ -702,6 +753,7 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
 
   game_handle_input(game, input, buffer);
 
+  game_update_entities(game, input);
 
   game_render(game, input, buffer);
 }
