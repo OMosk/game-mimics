@@ -157,12 +157,18 @@ typedef struct {
   body2d_t body;
   float left_to_live;
 } entity_projectile_t;
-#define PROJECTILE_SPEED 5.f
+#define PROJECTILE_SPEED 10.f
+
+typedef struct {
+  body2d_t body;
+  uint8_t delete_on_frame_end;
+} entity_spider_t;
 
 typedef enum {
   ENTITY_TYPE_MC,
   ENTITY_TYPE_WALL,
   ENTITY_TYPE_PROJECTILE,
+  ENTITY_TYPE_SPIDER,
 } entity_type_t;
 
 typedef struct {
@@ -171,6 +177,7 @@ typedef struct {
     entity_mc_t mc;
     entity_wall_t wall;
     entity_projectile_t projectile;
+    entity_spider_t spider;
   } u;
 } entity_t;
 
@@ -198,13 +205,14 @@ typedef struct {
   bool is_inited;
   bool over;
   float pixels_per_meter;
+  uint64_t frame_counter;
 
   entity_t *mc;
 
-  entity_t *active_entities[256];
+  entity_t *active_entities[1024];
   uint32_t active_entities_count;
 
-  entity_t entities_pool[256];
+  entity_t entities_pool[1024];
   uint32_t entities_count;
 
   freelist_node_t *next_free_entity;

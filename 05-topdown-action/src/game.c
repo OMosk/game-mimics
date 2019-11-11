@@ -190,23 +190,8 @@ typedef struct {
   vector2_t size;
 } rectangle_t;
 
-static rectangle_t translate_coords(game_t *game, drawing_buffer_t *buffer,
-                                    static_body2d_t *e) {
-  rectangle_t result = {};
-  float buffer_h = buffer->height;
-  float pixels_per_meter = game->pixels_per_meter;
-
-  result.top_left.x = (e->pos.x - e->size.x * 0.5f) * pixels_per_meter;
-  result.top_left.y =
-      buffer_h - (e->pos.y + e->size.y * 0.5f) * pixels_per_meter;
-
-  result.size.x = e->size.x * pixels_per_meter;
-  result.size.y = e->size.y * pixels_per_meter;
-  return result;
-}
-
-static vector2_t translate_point_coords(game_t *game, drawing_buffer_t *buffer,
-                                        vector2_t point) {
+static vector2_t translate_physics_coords_to_screen_coords(
+    game_t *game, drawing_buffer_t *buffer, vector2_t point) {
   vector2_t result = {};
   float buffer_h = buffer->height;
   float pixels_per_meter = game->pixels_per_meter;
@@ -232,7 +217,6 @@ static vector2_t translate_screen_coords_to_physics_coords(
 
 static void game_render(game_t *game, input_t *input,
                         drawing_buffer_t *buffer) {
-  // NOTE: most time we spend here currently
   memset(buffer->buffer, 255,
          buffer->width * buffer->height * sizeof(*buffer->buffer));
 
@@ -249,9 +233,9 @@ static void game_render(game_t *game, input_t *input,
       vector2_t top_left = V2(pos.x - size.x/2., pos.y + size.y/2.);
       vector2_t center = V2(pos.x, pos.y);
 
-      top_left = translate_point_coords(game, buffer, top_left);
-      center = translate_point_coords(game, buffer, center);
-
+      top_left =
+          translate_physics_coords_to_screen_coords(game, buffer, top_left);
+      center = translate_physics_coords_to_screen_coords(game, buffer, center);
 
       draw_rectangle(buffer, top_left.x, top_left.y,
                      size.x * game->pixels_per_meter,
@@ -270,7 +254,8 @@ static void game_render(game_t *game, input_t *input,
       uint32_t color = *(uint32_t *)&e->u.wall.color;
       vector2_t top_left = V2(pos.x-size.x/2., pos.y + size.y/2.);
 
-      top_left = translate_point_coords(game, buffer, top_left);
+      top_left =
+          translate_physics_coords_to_screen_coords(game, buffer, top_left);
       draw_rectangle(buffer, top_left.x, top_left.y,
                      size.x * game->pixels_per_meter,
                      size.y * game->pixels_per_meter, color);
@@ -279,9 +264,23 @@ static void game_render(game_t *game, input_t *input,
       vector2_t pos = e->u.projectile.body.pos;
       vector2_t size = e->u.projectile.body.size;
       uint32_t color = RGBA(0, 0, 0, 255);
-      vector2_t top_left = V2(pos.x, pos.y + size.y);
+      vector2_t top_left = V2(pos.x-size.x/2., pos.y + size.y/2.);
 
-      top_left = translate_point_coords(game, buffer, top_left);
+      top_left =
+          translate_physics_coords_to_screen_coords(game, buffer, top_left);
+      draw_rectangle(buffer, top_left.x, top_left.y,
+                     size.x * game->pixels_per_meter,
+                     size.y * game->pixels_per_meter, color);
+    } break;
+    case ENTITY_TYPE_SPIDER: {
+      entity_spider_t *spider = &e->u.spider;
+      vector2_t pos = spider->body.pos;
+      vector2_t size = spider->body.size;
+      uint32_t color = RGBA(255, 0, 0, 255);
+      vector2_t top_left = V2(pos.x -size.x/2., pos.y + size.y/2.);
+
+      top_left =
+          translate_physics_coords_to_screen_coords(game, buffer, top_left);
       draw_rectangle(buffer, top_left.x, top_left.y,
                      size.x * game->pixels_per_meter,
                      size.y * game->pixels_per_meter, color);
@@ -334,8 +333,20 @@ static void game_create_wall(game_t *game, float x, float y, float w, float h) {
 
 static void game_init_level(game_t *game) {
   game_create_wall(game, 0, 0, 1, 1);
-  game_create_wall(game, 1, 0, 10, 1);
+  game_create_wall(game, 1, 0, 15, 1);
+  game_create_wall(game, 0, 1, 1, 9);
+  game_create_wall(game, 0, 10, 16, 1);
   //scale and relation
+}
+
+static void game_create_spider(game_t *game, float x, float y) {
+  entity_t *e = game_alloc_entity(game);
+  *e = (entity_t){};
+  e->type = ENTITY_TYPE_SPIDER;
+  e->u.spider.body.pos.x = x;
+  e->u.spider.body.pos.y = y;
+  e->u.spider.body.size.x = 0.5;
+  e->u.spider.body.size.y = 0.5;
 }
 
 static void game_init(game_t *game) {
@@ -594,6 +605,105 @@ typedef struct {
   vector2_t max_speed;
 } movement_spec_t;
 
+static void mc_wall_test(entity_mc_t *mc, entity_wall_t *wall, float *dt, vector2_t *new_dp) {
+  vector2_t hit_line = V2(0.0f, 0.0f);
+  float tmp_dt = get_collision_time(&wall->body, (static_body2d_t *)&mc->body,
+                                    mc->body.speed, *dt, &hit_line);
+  if (tmp_dt < *dt) {
+    *dt = tmp_dt;
+    *new_dp = VECTOR2_MULT_NUMBER(
+        hit_line, VECTOR2_SCALAR_MULT(hit_line, mc->body.speed) /
+                      VECTOR2_SQR_LEN(hit_line));
+  }
+}
+
+static void projectile_wall_test(entity_projectile_t *projectile,
+                                 entity_wall_t *wall, float *dt,
+                                 vector2_t *new_dp) {
+  (void)new_dp;
+  vector2_t hit_line = V2(0.0f, 0.0f);
+  float tmp_dt =
+      get_collision_time(&wall->body, (static_body2d_t *)&projectile->body,
+                         projectile->body.speed, *dt, &hit_line);
+  if (tmp_dt < *dt) {
+    *dt = tmp_dt;
+    projectile->left_to_live = -1.;
+  }
+}
+
+static void projectile_spider_test(entity_projectile_t *projectile,
+                                 entity_spider_t *spider, float *dt,
+                                 vector2_t *new_dp) {
+  (void)new_dp;
+  vector2_t hit_line = V2(0.0f, 0.0f);
+  float tmp_dt = get_collision_time((static_body2d_t *)&spider->body,
+                                    (static_body2d_t *)&projectile->body,
+                                    projectile->body.speed, *dt, &hit_line);
+  if (tmp_dt < *dt) {
+    *dt = tmp_dt;
+    projectile->left_to_live = -1.;
+    spider->delete_on_frame_end = true;
+  }
+}
+
+/*
+static void projectile_mc_test(game_t *game, entity_projectile_t *projectile,
+                               entity_mc_t *mc, float *dt, vector2_t *new_dp) {
+  (void)game;
+  vector2_t hit_line = V2(0.0f, 0.0f);
+  float tmp_dt = get_collision_time((static_body2d_t *)&mc->body,
+                                    (static_body2d_t *)&projectile->body,
+                                    projectile->body.speed, *dt, &hit_line);
+  if (tmp_dt < *dt) {
+    *dt = tmp_dt;
+    projectile->left_to_live = -1.;
+    mc->body
+    //new_dp = VECTOR2_MULT_NUMBER(
+    //    hit_line, VECTOR2_SCALAR_MULT(hit_line, mc->body.speed) /
+    //                  VECTOR2_SQR_LEN(hit_line));
+  }
+}
+*/
+
+static void entities_collision_dispatch(game_t *game, entity_t *moving,
+                                        entity_t *stationary, float *dt,
+                                        vector2_t *dp) {
+  (void)game;
+  switch (moving->type) {
+  case ENTITY_TYPE_MC: {
+    switch (stationary->type) {
+    case ENTITY_TYPE_SPIDER: {
+    } break;
+    case ENTITY_TYPE_MC: {
+    } break;
+    case ENTITY_TYPE_WALL: {
+      mc_wall_test(&moving->u.mc, &stationary->u.wall, dt, dp);
+    } break;
+    case ENTITY_TYPE_PROJECTILE: {
+    } break;
+    }
+  } break;
+  case ENTITY_TYPE_WALL: {
+  } break;
+  case ENTITY_TYPE_PROJECTILE: {
+    switch (stationary->type) {
+    case ENTITY_TYPE_MC: {
+    } break;
+    case ENTITY_TYPE_WALL: {
+      projectile_wall_test(&moving->u.projectile, &stationary->u.wall, dt, dp);
+    } break;
+    case ENTITY_TYPE_SPIDER: {
+      projectile_spider_test(&moving->u.projectile, &stationary->u.spider, dt, dp);
+    } break;
+    case ENTITY_TYPE_PROJECTILE: {
+    } break;
+    }
+  }
+  case ENTITY_TYPE_SPIDER: {
+  } break;
+  }
+}
+
 static void move_entity(game_t *game, entity_t *target_entity, body2d_t *c,
                         movement_spec_t *spec, float dt) {
 
@@ -613,26 +723,7 @@ static void move_entity(game_t *game, entity_t *target_entity, body2d_t *c,
         if (o == target_entity) {
           continue;
         }
-        switch (o->type) {
-        case ENTITY_TYPE_WALL: {
-          vector2_t wall = V2(0.0f, 0.0f);
-          float tmp_dt = get_collision_time(&o->u.wall.body, (static_body2d_t *)c,
-                                         c->speed, dt, &wall);
-          if (tmp_dt < actual_dt) {
-            actual_dt = tmp_dt;
-            new_dp = VECTOR2_MULT_NUMBER(wall,
-              VECTOR2_SCALAR_MULT(wall, c->speed) / VECTOR2_SQR_LEN(wall));
-          }
-
-        } break;
-        case ENTITY_TYPE_PROJECTILE: {
-        } break;
-        case ENTITY_TYPE_MC: {
-        } break;
-        default: {
-          assert(0);
-        }
-        }
+        entities_collision_dispatch(game, target_entity, o, &actual_dt, &new_dp);
       }
     }
 
@@ -705,6 +796,10 @@ void game_handle_input(game_t *game, input_t *input, drawing_buffer_t *buffer) {
                           game->mc->u.mc.body.speed, normalized_looking_direction);
   }
 
+  if (was_pressed(input->mouse.right)) {
+    game_create_spider(game, cursor_physics_coords.x, cursor_physics_coords.y);
+  }
+
 }
 
 void game_update_entities(game_t *game, input_t *input) {
@@ -726,6 +821,8 @@ void game_update_entities(game_t *game, input_t *input) {
         continue;
       }
     } break;
+    case ENTITY_TYPE_SPIDER: {
+    } break;
     case ENTITY_TYPE_MC: {
     } break;
     case ENTITY_TYPE_WALL: {
@@ -734,13 +831,29 @@ void game_update_entities(game_t *game, input_t *input) {
   }
 }
 
+void game_on_frame_end(game_t *game) {
+  for (uint32_t i = 0; i < game->active_entities_count; ++i) {
+    entity_t *e = game->active_entities[i];
+    if (e->type == ENTITY_TYPE_SPIDER && e->u.spider.delete_on_frame_end) {
+        game->active_entities[i] = game->active_entities[game->active_entities_count-1];
+        game->active_entities_count--;
+        --i;
+    }
+  }
+}
+
 void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   game_t *game = (game_t *)memory;
+  game->frame_counter++;
+  if (game->frame_counter % 60 == 0) {
+    printf("Active entities = %u\n", game->active_entities_count);
+  }
 
   if (!game->is_inited) {
     game_init(game);
   }
-  if (input->restart) {
+
+  if (was_pressed(input->keyboard.esc)) {
     game_init(game);
     input->restart = false;
   }
@@ -756,6 +869,8 @@ void game_tick(void *memory, input_t *input, drawing_buffer_t *buffer) {
   game_update_entities(game, input);
 
   game_render(game, input, buffer);
+
+  game_on_frame_end(game);
 }
 
 static uint32_t game_read_16bytes(uint8_t *buffer) {

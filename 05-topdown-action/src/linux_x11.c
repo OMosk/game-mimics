@@ -286,6 +286,9 @@ static void X11EventLoop(input_t *input, debug_input_t *debug_input) {
 }
 
 static int game_tXErrorHandler(Display *display, XErrorEvent *error) {
+  char buffer[256] = {};
+  XGetErrorText(display, error->error_code, buffer, 255);
+  printf("Xlib error: %s\n", buffer);
   FatalError("Caught X11 error");
   (void)display;
   (void)error;
