@@ -11,6 +11,9 @@ Demos are developed for Linux/X11 machine.
 I've tried to separate platform layer from game code
 so other platforms should be possible to implement without much pain (probably).
 
+Dev requirements:
+`sudo apt install libx11-dev libxext-dev`
+
 Content:
 
 - [01 - Snake](#anchor_01)
