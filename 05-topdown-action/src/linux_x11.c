@@ -647,8 +647,8 @@ int main(int argc, char **argv, char **envp) {
   (void)argc;
   (void)envp;
 
+  char exe_basedir_buffer[3 * PATH_MAX];
   {
-    char exe_basedir_buffer[3 * PATH_MAX];
     char *exe_basedir;
     if (argv[0][0] == '/') {
       char *it = argv[0];
@@ -864,12 +864,12 @@ int main(int argc, char **argv, char **envp) {
     }
     game_timer_old = game_timer;
 
-    if (joystick_fd < 0) {
-      joystick_fd = look_for_gamepad(&gamepad_configuration);
-    }
-    if (joystick_fd >= 0) {
-      handle_joystick_input(&joystick_fd, &input, &gamepad_configuration);
-    }
+    //if (joystick_fd < 0) {
+    //  joystick_fd = look_for_gamepad(&gamepad_configuration);
+    //}
+    //if (joystick_fd >= 0) {
+    //  handle_joystick_input(&joystick_fd, &input, &gamepad_configuration);
+    //}
 
     if (debug_input.start_recording) {
       memcpy(loop_data.memory, memory, GAME_MEMORY_USAGE_BYTES);
@@ -913,8 +913,8 @@ int main(int argc, char **argv, char **envp) {
     if (frame_timing_after.tv_sec == last_sec) {
       ++fps;
     } else {
-      // printf("\rFPS = %u              ", fps);
-      // fflush(stdout);
+      printf("\rFPS = %u              ", fps);
+      fflush(stdout);
       fps = 1;
       last_sec = frame_timing_after.tv_sec;
     }
